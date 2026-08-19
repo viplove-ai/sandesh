@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, Divider, FormControlLabel, IconButton, Stack, Switch, TextField,
-  Typography,
+  Alert, Box, Button, Chip, Divider, FormControlLabel, IconButton, Stack, Switch, Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +17,10 @@ import { useAuth } from '../auth/AuthContext';
 
 interface Settings {
   previewsEnabled: boolean;
+  /**
+   * Not on this screen for now, and deliberately still carried: the PUT is a full replace, so a
+   * payload without these would clear a window somebody had already set.
+   */
   quietFrom: string | null;
   quietTo: string | null;
   mutedConvIds: string[];
@@ -186,26 +189,6 @@ export default function SettingsPage() {
               Turn this off and notifications say only &ldquo;New message&rdquo;. Useful on a
               phone other people pick up.
             </Typography>
-
-            <Typography variant="overline" color="text.secondary">
-              Quiet hours
-            </Typography>
-            <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 2 }}>
-              <TextField
-                type="time"
-                label="From"
-                InputLabelProps={{ shrink: true }}
-                value={settings.quietFrom ?? ''}
-                onChange={(e) => void save({ ...settings, quietFrom: e.target.value || null })}
-              />
-              <TextField
-                type="time"
-                label="To"
-                InputLabelProps={{ shrink: true }}
-                value={settings.quietTo ?? ''}
-                onChange={(e) => void save({ ...settings, quietTo: e.target.value || null })}
-              />
-            </Stack>
           </>
         )}
 
