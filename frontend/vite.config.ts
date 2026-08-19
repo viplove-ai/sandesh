@@ -9,13 +9,13 @@ export default defineConfig({
     react(),
     VitePWA({
       /*
-        'autoUpdate' as specified in the brand handoff. Worth knowing what it trades: a new build
-        activates on its own, so a phone can reload while somebody is part-way through typing.
-        Nirman chose 'prompt' for exactly that reason. Switch this back to 'prompt' if a
-        supervisor ever loses a message to it — the rest of the brand wiring does not depend on
-        which one is set.
+        'prompt', not the 'autoUpdate' the brand handoff specified. A new build activating on
+        its own reloads the page, and the message half typed into the composer is component
+        state rather than Dexie — it does not survive, and neither does the held event stream.
+        Nirman chose 'prompt' for exactly that reason and this follows it: the new worker parks,
+        and `UpdatePrompt` asks before letting it take over.
       */
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       manifest: false,
       manifestFilename: 'brand/manifest.webmanifest',
       workbox: {

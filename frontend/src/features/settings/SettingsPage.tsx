@@ -14,6 +14,7 @@ import { mediaStore, type StorageUsage } from '../../offline/mediaStore';
 import { runEviction } from '../../offline/eviction';
 import { describeBytes } from '../../shared/uploads';
 import { useAuth } from '../auth/AuthContext';
+import { useAppUpdate, type UpdateCheck } from '../../shared/appUpdate';
 
 interface Settings {
   previewsEnabled: boolean;
@@ -40,6 +41,7 @@ interface Settings {
 export default function SettingsPage() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { ready: updateReady, install, check, lastCheck } = useAppUpdate();
   const [health, setHealth] = useState<PushHealth | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [persisted, setPersisted] = useState<boolean | null>(null);
@@ -252,10 +254,74 @@ export default function SettingsPage() {
         )}
 
         <Divider sx={{ my: 3 }} />
+
+        {/*
+          Beside the sign-out, because that is where somebody goes when the app is misbehaving
+          and they are about to try the blunt instrument. A new version installs by itself and
+          then waits to be let in, and the waiting is where updates go missing: an installed app
+          on a site phone is never closed, so the snackbar can be dismissed once and not seen
+          again for a week. This is the same offer, on a screen that does not go anywhere — and
+          a way to ask when nothing has been offered at all.
+        */}
+        <Typography variant="overline" color="text.secondary">
+          App version
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 1 }}>
+          The app updates itself when it can. If it is behaving oddly, or somebody has told you a
+          fix went out, ask for it here.
+        </Typography>
+
+        {updateReady ? (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            A new version is ready. Your conversations stay on this phone.
+          </Alert>
+        ) : (
+          <UpdateCheckNote state={lastCheck} />
+        )}
+
+        <Button
+          variant={updateReady ? 'contained' : 'outlined'}
+          color="secondary"
+          disabled={lastCheck === 'CHECKING'}
+          onClick={() => void (updateReady ? install() : check())}
+          sx={{ display: 'block', mb: 2 }}
+        >
+          {updateReady
+            ? 'Update now'
+            : lastCheck === 'CHECKING'
+              ? 'Checking…'
+              : 'Check for updates'}
+        </Button>
+
+        <Divider sx={{ my: 3 }} />
         <Button variant="outlined" color="error" onClick={() => void signOut()}>
           Sign out
         </Button>
       </Box>
     </Box>
   );
+}
+
+/** What the last check found, said plainly. A check that cannot tell "there is nothing newer"
+ *  from "I could not ask" is a button that teaches people to stop pressing it. */
+function UpdateCheckNote({ state }: { state: UpdateCheck }) {
+  if (state === 'CURRENT') {
+    return <Alert severity="success" sx={{ mb: 1 }}>You have the latest version.</Alert>;
+  }
+  if (state === 'UNREACHABLE') {
+    return (
+      <Alert severity="info" sx={{ mb: 1 }}>
+        Could not check — there is no connection to the server. Try again when you have signal.
+      </Alert>
+    );
+  }
+  if (state === 'UNSUPPORTED') {
+    return (
+      <Alert severity="info" sx={{ mb: 1 }}>
+        This browser cannot check for updates. Close the app and open it again to pick up a new
+        version.
+      </Alert>
+    );
+  }
+  return null;
 }
