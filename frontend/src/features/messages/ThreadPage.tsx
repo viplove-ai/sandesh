@@ -3,11 +3,14 @@ import { Alert, Box, IconButton, Paper, Stack, TextField, Typography } from '@mu
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
+import DescriptionIcon from '@mui/icons-material/Description';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../offline/db';
-import { requestDownloadUrl, sendImage, sendText } from './api';
-import { isSendableImage } from '../../shared/uploads';
+import { requestDownloadUrl, sendDocument, sendImage, sendText } from './api';
+import {
+  ACCEPT_ATTRIBUTE, describeBytes, isSendableDocument, isSendableImage,
+} from '../../shared/uploads';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorDetail } from '../../shared/apiClient';
 import { tokens } from '../../app/theme';
@@ -49,16 +52,20 @@ export default function ThreadPage() {
   async function attach(file: File | undefined) {
     if (!file || !user) return;
     setError(null);
-    if (!isSendableImage(file)) {
-      // Documents are Week 4 of the pilot. Say which, rather than failing silently — a
-      // supervisor who tries a PDF and gets nothing concludes the app is broken.
-      setError('Photographs only for now. Documents are coming after the trial.');
+    if (!isSendableImage(file) && !isSendableDocument(file)) {
+      // Name what is allowed rather than failing silently — a supervisor who tries something
+      // and gets nothing concludes the app is broken.
+      setError('Photographs, PDFs and Office documents only.');
       return;
     }
     try {
-      await sendImage(convId, file, { id: user.id, fullName: user.fullName });
+      if (isSendableImage(file)) {
+        await sendImage(convId, file, { id: user.id, fullName: user.fullName });
+      } else {
+        await sendDocument(convId, file, { id: user.id, fullName: user.fullName });
+      }
     } catch (failure) {
-      setError(apiErrorDetail(failure));
+      setError(failure instanceof Error ? failure.message : apiErrorDetail(failure));
     }
   }
 
@@ -131,6 +138,27 @@ export default function ThreadPage() {
                   }}
                 />
               )}
+              {message.kind === 'DOC' && (
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  onClick={() => message.mediaId && void openMedia(message.mediaId)}
+                  sx={{ cursor: message.mediaId ? 'pointer' : 'default', mb: message.body ? 0.75 : 0 }}
+                >
+                  <DescriptionIcon fontSize="small" sx={{ color: tokens.annotation }} />
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
+                      {message.mediaFileName ?? 'Document'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {[describeBytes(message.mediaSizeBytes), 'Tap to open']
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Typography>
+                  </Box>
+                </Stack>
+              )}
               {message.body && (
                 <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
                   {message.body}
@@ -157,7 +185,7 @@ export default function ThreadPage() {
         <input
           ref={filePicker}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept={ACCEPT_ATTRIBUTE}
           hidden
           onChange={(event) => {
             void attach(event.target.files?.[0]);
@@ -166,7 +194,7 @@ export default function ThreadPage() {
         />
         <IconButton
           onClick={() => filePicker.current?.click()}
-          aria-label="Attach a photograph"
+          aria-label="Attach a photograph or document"
           sx={{ minWidth: 48 }}
         >
           <AttachFileIcon />

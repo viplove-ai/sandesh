@@ -30,8 +30,38 @@ export interface PreparedPhoto {
   originalBytes: number;
 }
 
+const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+/** What a site actually exchanges. Every one has a magic number the server re-checks. */
+const DOCUMENT_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+];
+
+export const ACCEPT_ATTRIBUTE = [...IMAGE_TYPES, ...DOCUMENT_TYPES].join(',');
+
+/** Matches the server's cap, so a file that cannot be sent is refused before it is uploaded. */
+export const DOCUMENT_MAX_BYTES = 25 * 1024 * 1024;
+
 export function isSendableImage(file: File): boolean {
-  return ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+  return IMAGE_TYPES.includes(file.type);
+}
+
+export function isSendableDocument(file: File): boolean {
+  return DOCUMENT_TYPES.includes(file.type);
+}
+
+/**
+ * A size somebody can act on. Worth showing beside a document rather than only its name: on a
+ * 2G edge the difference between tapping a 200 KB drawing and an 8 MB one is the difference
+ * between reading it now and losing ten minutes.
+ */
+export function describeBytes(bytes: number | undefined): string {
+  if (!bytes) return '';
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
 /**

@@ -23,6 +23,7 @@ export interface StoredMessage {
   mediaId?: string;
   mediaFileName?: string;
   mediaContentType?: string;
+  mediaSizeBytes?: number;
   /** A data URL for the thumbnail. Kept as long as the text; the original is evictable. */
   thumbnail?: string;
   sentAt: string;

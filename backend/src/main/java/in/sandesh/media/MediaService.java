@@ -5,6 +5,7 @@ import in.sandesh.media.MediaDtos.DownloadUrlResponse;
 import in.sandesh.media.MediaDtos.UploadUrlRequest;
 import in.sandesh.media.MediaDtos.UploadUrlResponse;
 import in.sandesh.security.AuthenticatedUser;
+import io.minio.GetObjectArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.http.Method;
@@ -12,6 +13,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.InputStream;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -56,6 +58,46 @@ public class MediaService {
 
         return new UploadUrlResponse(mediaId,
                 presign(Method.PUT, objectKey, null), properties.signedUrlMinutes());
+    }
+
+    /**
+     * Confirms the bytes are what the sender said they were, once they have actually arrived.
+     *
+     * <p>Called after the upload and before the message that points at the object is accepted.
+     * It cannot be done earlier: the presigned PUT goes straight to storage, so at the moment
+     * the URL is issued there is nothing yet to inspect. A file that disagrees with its own
+     * label is refused here, and the message is never sent.</p>
+     */
+    @Transactional(readOnly = true)
+    public void verifyUploaded(UUID mediaId, UUID orgId) {
+        MediaObject object = objects.findById(mediaId)
+                .orElseThrow(() -> BusinessException.notFound("That file"));
+        if (!object.getOrgId().equals(orgId)) {
+            throw BusinessException.notFound("That file");
+        }
+        byte[] head = new byte[ContentTypeSniffer.PROBE_BYTES];
+        try (InputStream stream = minio.getObject(GetObjectArgs.builder()
+                .bucket(properties.bucket())
+                .object(object.getObjectKey())
+                .length((long) ContentTypeSniffer.PROBE_BYTES)
+                .offset(0L)
+                .build())) {
+            int read = stream.readNBytes(head, 0, head.length);
+            if (read <= 0) {
+                throw new BusinessException("media.empty", "That file did not upload.",
+                        HttpStatus.UNPROCESSABLE_ENTITY);
+            }
+        } catch (BusinessException known) {
+            throw known;
+        } catch (Exception e) {
+            throw new BusinessException("media.storage",
+                    "Storage is not answering. Try again.", HttpStatus.SERVICE_UNAVAILABLE);
+        }
+        if (!ContentTypeSniffer.matches(object.getContentType(), head)) {
+            throw new BusinessException("media.mismatch",
+                    "That file is not the kind of file it says it is.",
+                    HttpStatus.UNPROCESSABLE_ENTITY);
+        }
     }
 
     @Transactional(readOnly = true)

@@ -83,7 +83,14 @@ app:
     bucket: ${STORAGE_BUCKET:sandesh-media}
     signed-url-minutes: 10
     max-file-size-bytes: 26214400
-    allowed-content-types: image/jpeg,image/png,image/webp
+    # Images and the document kinds a site actually exchanges. Every one of these has a magic
+    # number ContentTypeSniffer can check, which is the point — an allow-list of labels is not
+    # an allow-list of files.
+    allowed-content-types: >-
+      image/jpeg,image/png,image/webp,application/pdf,
+      application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+      application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,
+      application/vnd.openxmlformats-officedocument.presentationml.presentation
 
 springdoc:
   swagger-ui:

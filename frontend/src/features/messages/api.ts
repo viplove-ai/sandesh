@@ -1,6 +1,6 @@
 import { apiClient } from '../../shared/apiClient';
 import { db, markSent, type StoredMessage } from '../../offline/db';
-import { preparePhoto } from '../../shared/uploads';
+import { DOCUMENT_MAX_BYTES, preparePhoto } from '../../shared/uploads';
 
 export interface SendResponse {
   clientMsgId: string;
@@ -84,6 +84,7 @@ export async function sendImage(convId: string, file: File, me: { id: string; fu
     kind: 'IMAGE',
     mediaFileName: photo.fileName,
     mediaContentType: photo.contentType,
+    mediaSizeBytes: photo.blob.size,
     thumbnail: photo.thumbnail,
     sentAt: new Date().toISOString(),
     state: 'pending',
@@ -115,6 +116,67 @@ export async function sendImage(convId: string, file: File, me: { id: string; fu
         fileName: photo.fileName,
         contentType: photo.contentType,
         sizeBytes: photo.blob.size,
+      },
+    });
+
+    await markSent(clientMsgId, data.msgId, data.sentAt);
+    await db.messages.update(data.msgId, { mediaId: upload.mediaId });
+    return data;
+  } catch (failure) {
+    await db.messages.put({ ...optimistic, state: 'failed' });
+    throw failure;
+  }
+}
+
+/**
+ * A document goes up as it is — there is nothing to resize and re-encoding a PDF would only
+ * damage it. The size cap is checked here so a file that cannot be sent is refused before it
+ * has spent a minute of somebody's connection going nowhere.
+ */
+export async function sendDocument(
+  convId: string,
+  file: File,
+  me: { id: string; fullName: string },
+) {
+  if (file.size > DOCUMENT_MAX_BYTES) {
+    throw new Error('That file is larger than 25 MB.');
+  }
+  const clientMsgId = crypto.randomUUID();
+  const optimistic: StoredMessage = {
+    msgId: clientMsgId,
+    clientMsgId,
+    convId,
+    from: me.id,
+    fromName: me.fullName,
+    kind: 'DOC',
+    mediaFileName: file.name,
+    mediaContentType: file.type,
+    mediaSizeBytes: file.size,
+    sentAt: new Date().toISOString(),
+    state: 'pending',
+    mine: true,
+  };
+  await db.messages.put(optimistic);
+
+  try {
+    const upload = await requestUploadUrl(file.name, file.type, file.size, convId);
+
+    const put = await fetch(upload.uploadUrl, {
+      method: 'PUT',
+      body: file,
+      headers: { 'Content-Type': file.type },
+    });
+    if (!put.ok) throw new Error(`upload failed: ${put.status}`);
+
+    const { data } = await apiClient.post<SendResponse>('/messages', {
+      clientMsgId,
+      convId,
+      kind: 'DOC',
+      media: {
+        mediaId: upload.mediaId,
+        fileName: file.name,
+        contentType: file.type,
+        sizeBytes: file.size,
       },
     });
 

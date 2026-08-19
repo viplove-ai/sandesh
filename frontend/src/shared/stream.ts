@@ -22,7 +22,7 @@ export interface Delivery {
   fromName: string;
   kind: 'TEXT' | 'IMAGE' | 'DOC';
   body?: string;
-  media?: { mediaId: string; fileName: string; contentType: string };
+  media?: { mediaId: string; fileName: string; contentType: string; sizeBytes?: number };
   sentAt: string;
 }
 
@@ -134,6 +134,7 @@ export class MessageStream {
       mediaId: delivery.media?.mediaId,
       mediaFileName: delivery.media?.fileName,
       mediaContentType: delivery.media?.contentType,
+      mediaSizeBytes: delivery.media?.sizeBytes,
       sentAt: delivery.sentAt,
       state: 'received',
       mine: false,

@@ -6,6 +6,7 @@ import in.sandesh.common.BusinessException;
 import in.sandesh.conversation.ConversationId;
 import in.sandesh.conversation.ConversationService;
 import in.sandesh.directory.NirmanDirectory;
+import in.sandesh.media.MediaService;
 import in.sandesh.moderation.RestrictionGuard;
 import in.sandesh.notify.Notifier;
 import in.sandesh.message.MessageDtos.Delivery;
@@ -51,6 +52,7 @@ public class MessageService {
     private final NirmanDirectory directory;
     private final StreamRegistry streams;
     private final RestrictionGuard restrictions;
+    private final MediaService media;
     private final Notifier notifier;
     private final ObjectMapper json;
     private final int sweepAfterDays;
@@ -58,7 +60,7 @@ public class MessageService {
     public MessageService(OutboxRepository outbox, MessageIdempotencyRepository ledger,
                           ConversationService conversations, NirmanDirectory directory,
                           StreamRegistry streams, RestrictionGuard restrictions,
-                          Notifier notifier, ObjectMapper json,
+                          MediaService media, Notifier notifier, ObjectMapper json,
                           @Value("${app.outbox.sweep-after-days:7}") int sweepAfterDays) {
         this.outbox = outbox;
         this.ledger = ledger;
@@ -66,6 +68,7 @@ public class MessageService {
         this.directory = directory;
         this.streams = streams;
         this.restrictions = restrictions;
+        this.media = media;
         this.notifier = notifier;
         this.json = json;
         this.sweepAfterDays = sweepAfterDays;
@@ -94,6 +97,16 @@ public class MessageService {
             }
             return new SendResponse(request.clientMsgId(), previous.getMsgId(),
                     previous.getSentAt());
+        }
+
+        if (!"TEXT".equals(request.kind())) {
+            if (request.media() == null) {
+                throw new BusinessException("message.media-missing",
+                        "That message has no file attached.", HttpStatus.UNPROCESSABLE_ENTITY);
+            }
+            // The declared type is the sender's claim; this is where it stops being taken on
+            // trust. Checked before fan-out, so a refused file never becomes a message.
+            media.verifyUploaded(request.media().mediaId(), sender.orgId());
         }
 
         ConversationId conversation = ConversationId.parse(request.convId());
