@@ -6,8 +6,8 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import DescriptionIcon from '@mui/icons-material/Description';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
-import { db } from '../../offline/db';
-import { openMedia as resolveMedia, sendDocument, sendImage, sendText } from './api';
+import { db, markConversationRead } from '../../offline/db';
+import { openMedia as resolveMedia, saveMedia, sendDocument, sendImage, sendText } from './api';
 import {
   ACCEPT_ATTRIBUTE, describeBytes, isSendableDocument, isSendableImage,
 } from '../../shared/uploads';
@@ -37,6 +37,16 @@ export default function ThreadPage() {
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages?.length]);
+
+  // Open is read. The thread renders the whole conversation and scrolls to the newest, so the
+  // moment it is on screen there is nothing left in it to be told about — and a message that
+  // arrives while it is still open is read too, which is why this follows the messages rather
+  // than running once on mount.
+  const newest = messages?.length ? messages[messages.length - 1].sentAt : undefined;
+  useEffect(() => {
+    if (!convId || !newest) return;
+    void markConversationRead(convId, newest);
+  }, [convId, newest]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -71,6 +81,7 @@ export default function ThreadPage() {
     }
   }
 
+  // A photograph is looked at, so it opens.
   async function openMedia(message: {
     mediaId?: string;
     convId: string;
@@ -78,6 +89,20 @@ export default function ThreadPage() {
   }) {
     try {
       window.open(await resolveMedia(message), '_blank', 'noopener,noreferrer');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : apiErrorDetail(failure));
+    }
+  }
+
+  // A document is kept, so it goes to the phone's downloads and the thread stays on screen.
+  async function saveDocument(message: {
+    mediaId?: string;
+    convId: string;
+    mediaFileName?: string;
+    mediaEvicted?: boolean;
+  }) {
+    try {
+      await saveMedia(message);
     } catch (failure) {
       setError(failure instanceof Error ? failure.message : apiErrorDetail(failure));
     }
@@ -164,7 +189,7 @@ export default function ThreadPage() {
                   direction="row"
                   spacing={1}
                   alignItems="center"
-                  onClick={() => void openMedia(message)}
+                  onClick={() => void saveDocument(message)}
                   sx={{ cursor: message.mediaId ? 'pointer' : 'default', mb: message.body ? 0.75 : 0 }}
                 >
                   <DescriptionIcon fontSize="small" sx={{ color: tokens.annotation }} />
@@ -173,7 +198,7 @@ export default function ThreadPage() {
                       {message.mediaFileName ?? 'Document'}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {[describeBytes(message.mediaSizeBytes), 'Tap to open']
+                      {[describeBytes(message.mediaSizeBytes), 'Tap to download']
                         .filter(Boolean)
                         .join(' · ')}
                     </Typography>

@@ -48,6 +48,20 @@ export interface StoredConversation {
   lastPreview?: string;
 }
 
+/**
+ * How far this person has read in a conversation. One row per conversation, written when the
+ * thread is on screen.
+ *
+ * <p>It lives here rather than on the server for the same reason the messages do: the device is
+ * the copy, and a supervisor who reads a message in a tunnel has read it whether or not the
+ * server ever hears about it.</p>
+ */
+export interface ReadMark {
+  convId: string;
+  /** ISO timestamp of the newest message that has been seen. */
+  lastReadAt: string;
+}
+
 /** Where the stream resumes from. One row, id 'stream'. */
 export interface StreamCursor {
   id: string;
@@ -57,6 +71,7 @@ export interface StreamCursor {
 class SandeshDb extends Dexie {
   messages!: Table<StoredMessage, string>;
   conversations!: Table<StoredConversation, string>;
+  reads!: Table<ReadMark, string>;
   cursors!: Table<StreamCursor, string>;
 
   constructor() {
@@ -67,6 +82,11 @@ class SandeshDb extends Dexie {
       messages: 'msgId, clientMsgId, [convId+sentAt], convId, state',
       conversations: 'convId, lastMessageAt',
       cursors: 'id',
+    });
+    // Added rather than folded into version 1: a phone already carrying three years of messages
+    // must open on the new build, not be handed an upgrade that rewrites its only copy.
+    this.version(2).stores({
+      reads: 'convId',
     });
   }
 }
@@ -96,6 +116,47 @@ export async function markSent(clientMsgId: string, msgId: string, sentAt: strin
   });
 }
 
+/**
+ * Mark a conversation read up to the newest message on screen.
+ *
+ * <p>The high-water mark is a message's own sentAt rather than the clock, because the two
+ * disagree: a phone that has been offline commits a batch whose timestamps are all in the past,
+ * and a mark written as "now" would swallow every one of them unread. It only ever moves
+ * forward, so a thread scrolled back through does not un-read what came in behind it.</p>
+ */
+export async function markConversationRead(convId: string, upTo: string): Promise<void> {
+  await db.transaction('rw', db.reads, async () => {
+    const existing = await db.reads.get(convId);
+    if (existing && existing.lastReadAt >= upTo) return;
+    await db.reads.put({ convId, lastReadAt: upTo });
+  });
+}
+
+/**
+ * Unread counts for the whole list, keyed by conversation id.
+ *
+ * <p>Counted on the device from what is stored, not asked of the server — the badge has to be
+ * right on a phone that has not had a signal since this morning, and the messages it would be
+ * counting are already here.</p>
+ *
+ * <p>Read through Dexie's `state` index: everything that arrived from somebody else is
+ * 'received', so this never walks the sender's own three years of messages.</p>
+ */
+export async function unreadCounts(meId: string): Promise<Record<string, number>> {
+  const marks = new Map((await db.reads.toArray()).map((mark) => [mark.convId, mark.lastReadAt]));
+  const counts: Record<string, number> = {};
+
+  await db.messages.where('state').equals('received').each((message) => {
+    // Our own message, delivered back from another device, is not something to be told about.
+    if (message.mine || message.from === meId) return;
+    const seenTo = marks.get(message.convId);
+    if (seenTo && message.sentAt <= seenTo) return;
+    counts[message.convId] = (counts[message.convId] ?? 0) + 1;
+  });
+
+  return counts;
+}
+
 export async function readCursor(): Promise<string | undefined> {
   return (await db.cursors.get('stream'))?.lastEventId;
 }
@@ -106,9 +167,10 @@ export async function writeCursor(lastEventId: string): Promise<void> {
 
 /** A site handset changes hands, and the conversations on it are not the next person's. */
 export async function forgetEverything(): Promise<void> {
-  await db.transaction('rw', db.messages, db.conversations, db.cursors, async () => {
+  await db.transaction('rw', db.messages, db.conversations, db.reads, db.cursors, async () => {
     await db.messages.clear();
     await db.conversations.clear();
+    await db.reads.clear();
     await db.cursors.clear();
   });
 }

@@ -197,21 +197,21 @@ export async function sendDocument(
 }
 
 /**
- * Open a file, from the device if it is still here and from the server if it is not.
+ * Where the bytes are: on the device if they are still here, from the server if they are not.
  *
  * The re-fetch is what makes the eviction ladder safe: dropping a site channel's original costs
  * a download rather than the file. A direct message has no server copy, so an evicted one is
  * genuinely gone and the caller is told rather than shown a broken image.
  */
-export async function openMedia(message: {
+async function locateMedia(message: {
   mediaId?: string;
   convId: string;
   mediaEvicted?: boolean;
-}): Promise<string> {
+}): Promise<{ href: string; fileName?: string; isLocalObjectUrl: boolean }> {
   if (!message.mediaId) throw new Error('That message has no file.');
 
   const local = await mediaStore.get(message.mediaId);
-  if (local) return URL.createObjectURL(local);
+  if (local) return { href: URL.createObjectURL(local), isLocalObjectUrl: true };
 
   if (message.convId.startsWith('dm:')) {
     throw new Error(
@@ -219,6 +219,52 @@ export async function openMedia(message: {
     );
   }
 
-  const { downloadUrl } = await requestDownloadUrl(message.mediaId);
-  return downloadUrl;
+  const { downloadUrl, fileName } = await requestDownloadUrl(message.mediaId);
+  return { href: downloadUrl, fileName, isLocalObjectUrl: false };
+}
+
+/** Open a photograph full-size. Images are looked at, not filed. */
+export async function openMedia(message: {
+  mediaId?: string;
+  convId: string;
+  mediaEvicted?: boolean;
+}): Promise<string> {
+  return (await locateMedia(message)).href;
+}
+
+/**
+ * Put a document in the phone's downloads rather than opening it inside the app.
+ *
+ * <p>A drawing or a bill is a thing somebody keeps, forwards and opens in the app that reads it
+ * — an in-app tab is a dead end on a phone, and in an installed PWA it throws the person out
+ * into a browser window with no way back to the thread. So the file goes to the device and the
+ * conversation stays where it was.</p>
+ *
+ * <p>The `download` attribute carries the file's real name for the copy already on the device.
+ * A cross-origin presigned URL ignores that attribute, which costs nothing here: the server
+ * presigns every download with `Content-Disposition: attachment`, so the browser files it
+ * rather than rendering it either way.</p>
+ */
+export async function saveMedia(message: {
+  mediaId?: string;
+  convId: string;
+  mediaFileName?: string;
+  mediaEvicted?: boolean;
+}): Promise<void> {
+  const located = await locateMedia(message);
+
+  const anchor = document.createElement('a');
+  anchor.href = located.href;
+  anchor.download = message.mediaFileName ?? located.fileName ?? 'file';
+  anchor.rel = 'noopener';
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  // Revoked late and not immediately: the browser reads the blob after the click returns, and
+  // releasing it in the same tick cancels the save on a phone slow enough to matter.
+  if (located.isLocalObjectUrl) {
+    setTimeout(() => URL.revokeObjectURL(located.href), 60_000);
+  }
 }
