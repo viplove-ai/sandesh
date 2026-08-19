@@ -91,14 +91,38 @@ fly apps create sandesh-api
 fly apps create sandesh
 ```
 
-Then set the backend's secrets (never in `fly.toml` — this repo is public):
+### The database and its role
+
+Same Neon project as Nirman — one Postgres server, separate databases (`docs/PLAN.md` §18).
+Run against any database in the project:
+
+```sql
+CREATE ROLE sandesh LOGIN PASSWORD '<pick one>';
+```
+
+```sql
+CREATE DATABASE sandesh OWNER sandesh;
+```
+
+The role first, then the database it owns. Owning it is all the grant Flyway needs.
+
+A dedicated role rather than reusing `neondb_owner`, and the reason is this repository: it is
+public, and Sandesh is a second service holding a second set of secrets. If those leak, they
+should reach a messenger's spool and not the payroll sitting on the same server.
+
+`chat_reader` is a third role again, created by the Nirman migration and given a password out of
+band — see `docs/nirman-migration/`.
+
+### Secrets
+
+Never in `fly.toml` — this repo is public:
 
 ```bash
 flyctl storage create --app sandesh-api --name sandesh-media
 ```
 
 ```bash
-flyctl secrets set --app sandesh-api DATABASE_URL='jdbc:postgresql://<neon-host>/sandesh?sslmode=require' DB_USER='neondb_owner' DB_PASSWORD='...' NIRMAN_DATABASE_URL='jdbc:postgresql://<neon-host>/nirman?sslmode=require' NIRMAN_DB_USER='chat_reader' NIRMAN_DB_PASSWORD='...' JWT_SECRET='<the same value Nirman uses>' STORAGE_ACCESS_KEY='tid_...' STORAGE_SECRET_KEY='tsec_...' STORAGE_BUCKET='sandesh-media' CORS_ALLOWED_ORIGINS='https://sandesh.fly.dev'
+flyctl secrets set --app sandesh-api DATABASE_URL='jdbc:postgresql://<neon-host>/sandesh?sslmode=require' DB_USER='sandesh' DB_PASSWORD='<the one you just picked>' NIRMAN_DATABASE_URL='jdbc:postgresql://<neon-host>/nirman?sslmode=require' NIRMAN_DB_USER='chat_reader' NIRMAN_DB_PASSWORD='...' JWT_SECRET='<the same value Nirman uses>' STORAGE_ACCESS_KEY='tid_...' STORAGE_SECRET_KEY='tsec_...' STORAGE_BUCKET='sandesh-media' CORS_ALLOWED_ORIGINS='https://sandesh.fly.dev'
 ```
 
 Production takes the two connection strings **whole**, because Neon's require `sslmode` — the
