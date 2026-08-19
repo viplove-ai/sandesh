@@ -22,21 +22,24 @@ The full design — and the reasoning behind every decision below — is in
 - **No chat history table.** An undelivered message waits in `outbox` and is deleted the moment
   the recipient's device says it has committed it.
 - **No conversation table.** Membership is derived from Nirman's site assignments on every read.
-- **No new infrastructure.** A database and a bucket, on the Postgres and MinIO already running.
+- **No new infrastructure.** A schema and a bucket, on the Postgres and MinIO already running.
 
 ## Running it locally
 
-You need Java 21, Node 22, and either Nirman's stack already up or Docker for the one here.
+You need Java 21, Node 22, and Nirman's Postgres. Sandesh's tables live in a `sandesh` schema
+inside Nirman's database and its directory reads two views in `public` on the same connection,
+so there is no standalone database worth pointing at — the compose file here is for MinIO.
 
 ```bash
 cp .env.example .env
 ```
 
-Set `JWT_SECRET` to **exactly** the value Nirman uses. Then apply the contract views to Nirman's
-database — see [`docs/nirman-migration/`](docs/nirman-migration/) — and:
+Set `JWT_SECRET` to **exactly** the value Nirman uses and point `DATABASE_URL` at Nirman's local
+database. Then apply the contract views to it — see
+[`docs/nirman-migration/`](docs/nirman-migration/) — and:
 
 ```bash
-docker compose up -d
+docker compose up -d minio minio-init
 ```
 
 ```bash
@@ -96,9 +99,33 @@ fly apps create sandesh-api
 fly apps create sandesh
 ```
 
-### The database and its role
+### The database and its schema
 
-Same Neon project as Nirman — one Postgres server, separate databases (`docs/PLAN.md` §18).
+Same database as Nirman, with a `sandesh` schema inside it (`docs/PLAN.md` §18). There is
+nothing to create by hand: Flyway makes the schema on first boot and keeps its history table
+inside it, so Sandesh's migrations never see Nirman's and Nirman's never see these.
+
+What it needs is a role holding `CREATE` on Nirman's database, which is why the deployment
+reuses Nirman's own credentials rather than minting a second pair. Copy them machine to machine
+rather than by hand — Fly will not show you a secret's value, and `JWT_SECRET` must be
+byte-identical to Nirman's or every request is refused with no useful error:
+
+```bash
+flyctl ssh console -a nirman-constructions-api -C printenv | tr -d '\r' | grep -E '^(DATABASE_URL|DB_USER|DB_PASSWORD|JWT_SECRET)=' | flyctl secrets import --app sandesh-api --stage
+```
+
+Compare `flyctl secrets list` across the two apps afterwards: the digests match when the values
+do, which is the only confirmation available that the secret arrived intact.
+
+An earlier design gave Sandesh its own database, plus a read-only `chat_reader` role for
+Nirman's views. What it bought was a real boundary and what it cost was four credentials kept in
+step across two systems — each one a way to fail at boot with an error naming the wrong thing.
+The price of the change is worth stating plainly rather than discovering: shared vacuum, shared
+backups, shared restore, and a chat table that can now fill the disk Nirman is using.
+
+<details>
+<summary>The old two-database setup, kept for reference</summary>
+
 Run against any database in the project:
 
 ```sql
@@ -151,22 +178,43 @@ should reach a messenger's spool and not the payroll sitting on the same server.
 `chat_reader` is a third role again, created by the Nirman migration and given a password out of
 band — see `docs/nirman-migration/`.
 
+</details>
+
+### Scale the backend back to one machine
+
+Fly creates a second machine for high availability on an app's first deploy, and for this
+backend that is wrong. Presence lives in the JVM — `StreamRegistry` holds the open streams of
+the instance it is running in, and a second instance holds streams the first cannot deliver to.
+`fly.toml` says `min_machines_running = 1`; the first deploy overrides it anyway:
+
+```bash
+fly scale count 1 --app sandesh-api
+```
+
+The frontend is static nginx and can keep both.
+
 ### Secrets
 
-Never in `fly.toml` — this repo is public:
+Never in `fly.toml` — this repo is public. The database credentials arrive with the import
+above; these are Sandesh's own:
 
 ```bash
 flyctl storage create --app sandesh-api --name sandesh-media
 ```
 
 ```bash
-flyctl secrets set --app sandesh-api DATABASE_URL='jdbc:postgresql://<neon-host>/sandesh?sslmode=require' DB_USER='sandesh' DB_PASSWORD='<the one you just picked>' NIRMAN_DATABASE_URL='jdbc:postgresql://<neon-host>/nirman?sslmode=require' NIRMAN_DB_USER='chat_reader' NIRMAN_DB_PASSWORD='...' JWT_SECRET='<the same value Nirman uses>' STORAGE_ACCESS_KEY='tid_...' STORAGE_SECRET_KEY='tsec_...' STORAGE_BUCKET='sandesh-media' CORS_ALLOWED_ORIGINS='https://sandesh.fly.dev'
+flyctl secrets set --app sandesh-api STORAGE_ACCESS_KEY='tid_...' STORAGE_SECRET_KEY='tsec_...' STORAGE_BUCKET='sandesh-media' CORS_ALLOWED_ORIGINS='https://sandesh.fly.dev'
 ```
 
-Production takes the two connection strings **whole**, because Neon's require `sslmode` — the
-`DB_HOST`/`DB_PORT` form in `.env.example` is for local development only. Take Neon's **direct**
-endpoint, not the `-pooler` one: Hikari already holds a pool, and stacking it on PgBouncer in
-transaction mode breaks prepared statements.
+`flyctl storage create` sets the same two keys under its own `AWS_*` names. Sandesh reads
+`STORAGE_ACCESS_KEY` and `STORAGE_SECRET_KEY`, so copy the values across and unset the `AWS_*`
+ones rather than leaving two copies of one credential on the app. A destroyed bucket's name is
+held by Tigris for some minutes afterwards, so recreating one under the same name fails until
+it is released.
+
+Production takes `DATABASE_URL` **whole**, because Neon's carries `sslmode`. Take Neon's
+**direct** endpoint, not the `-pooler` one: Hikari already holds a pool, and stacking it on
+PgBouncer in transaction mode breaks prepared statements.
 
 Create a deploy token per app and add each to this repo's Actions secrets as
 `FLY_API_TOKEN_BACKEND` and `FLY_API_TOKEN_FRONTEND`:
@@ -175,8 +223,8 @@ Create a deploy token per app and add each to this repo's Actions secrets as
 fly tokens create deploy --app sandesh-api
 ```
 
-Finally, add `https://sandesh.fly.dev` to Nirman's `CORS_ALLOWED_ORIGINS` — without it every
-sign-in fails at the preflight.
+Finally, Nirman's `CORS_ALLOWED_ORIGINS` has to name `https://sandesh.fly.dev` — without it
+every sign-in fails at the preflight.
 
 ## Retention is built and switched off
 

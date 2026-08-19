@@ -12,8 +12,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * The one place that touches Nirman's database. Plain JDBC against the views — never JPA, never
- * a repository, and never a write.
+ * The one place that touches Nirman's data. Plain JDBC against the two contract views — never
+ * JPA, never a repository, and never a write.
+ *
+ * <p>Every query names {@code public.} explicitly. The connection's search path is the
+ * {@code sandesh} schema, so an unqualified name would resolve there and fail — and the
+ * qualification doubles as a marker at each call site that this row belongs to Nirman.</p>
  */
 @Service
 public class NirmanDirectoryService implements NirmanDirectory {
@@ -58,7 +62,7 @@ public class NirmanDirectoryService implements NirmanDirectory {
         }
         try {
             Long current = jdbc.queryForObject(
-                    "SELECT session_epoch FROM chat_directory_v WHERE user_id = ? AND is_active = true",
+                    "SELECT session_epoch FROM public.chat_directory_v WHERE user_id = ? AND is_active = true",
                     Long.class, userId);
             return current != null && current == sessionEpoch;
         } catch (EmptyResultDataAccessException deactivated) {
@@ -70,7 +74,7 @@ public class NirmanDirectoryService implements NirmanDirectory {
     public List<Membership> membershipsOf(UUID userId) {
         return membershipCache.get(userId, id -> jdbc.query("""
                 SELECT DISTINCT site_id, project_id, site_name, project_name
-                  FROM chat_site_membership_v WHERE user_id = ?
+                  FROM public.chat_site_membership_v WHERE user_id = ?
                  ORDER BY project_name, site_name
                 """, MEMBERSHIP, id));
     }
@@ -79,8 +83,8 @@ public class NirmanDirectoryService implements NirmanDirectory {
     public List<Person> membersOfSite(UUID siteId) {
         return siteMemberCache.get(siteId, id -> jdbc.query("""
                 SELECT d.user_id, d.org_id, d.full_name, d.username
-                  FROM chat_site_membership_v m
-                  JOIN chat_directory_v d ON d.user_id = m.user_id
+                  FROM public.chat_site_membership_v m
+                  JOIN public.chat_directory_v d ON d.user_id = m.user_id
                  WHERE m.site_id = ? AND d.is_active = true
                  ORDER BY d.full_name
                 """, PERSON, id));
@@ -90,7 +94,7 @@ public class NirmanDirectoryService implements NirmanDirectory {
     public List<Person> membersOfOrg(UUID orgId) {
         return orgMemberCache.get(orgId, id -> jdbc.query("""
                 SELECT user_id, org_id, full_name, username
-                  FROM chat_directory_v WHERE org_id = ? AND is_active = true
+                  FROM public.chat_directory_v WHERE org_id = ? AND is_active = true
                  ORDER BY full_name
                 """, PERSON, id));
     }
@@ -101,7 +105,7 @@ public class NirmanDirectoryService implements NirmanDirectory {
             return List.of();
         }
         String placeholders = String.join(",", userIds.stream().map(u -> "?").toList());
-        return jdbc.query("SELECT user_id, org_id, full_name, username FROM chat_directory_v"
+        return jdbc.query("SELECT user_id, org_id, full_name, username FROM public.chat_directory_v"
                 + " WHERE is_active = true AND user_id IN (" + placeholders + ")",
                 PERSON, userIds.toArray());
     }
@@ -115,7 +119,7 @@ public class NirmanDirectoryService implements NirmanDirectory {
     public List<Person> search(UUID orgId, String query, int limit) {
         return jdbc.query("""
                 SELECT user_id, org_id, full_name, username
-                  FROM chat_directory_v
+                  FROM public.chat_directory_v
                  WHERE org_id = ? AND is_active = true
                    AND (full_name ILIKE ? OR username ILIKE ?)
                  ORDER BY full_name LIMIT ?

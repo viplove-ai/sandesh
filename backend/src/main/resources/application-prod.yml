@@ -3,26 +3,15 @@
 
 app:
   datasource:
-    # A managed Postgres (Neon) hands you one connection string including sslmode, so take it
-    # whole rather than rebuilding it from host and port the way the default profile does.
-    sandesh:
-      jdbc-url: ${DATABASE_URL}
-      username: ${DB_USER}
-      password: ${DB_PASSWORD}
-      # Neon's free tier caps connections well below the default, and a 512mb relay does not
-      # need more. The stream holds a connection to the client, not to the database.
-      maximum-pool-size: 6
-      minimum-idle: 1
-    # The same Postgres server, a different database, and a role that may only SELECT from two
-    # views. Separate credentials on purpose: if this one leaked it reads a directory, not a
-    # payroll.
-    nirman:
-      jdbc-url: ${NIRMAN_DATABASE_URL}
-      username: ${NIRMAN_DB_USER}
-      password: ${NIRMAN_DB_PASSWORD}
-      maximum-pool-size: 4
-      minimum-idle: 1
-      read-only: true
+    # A managed Postgres hands you one connection string including sslmode, so take it whole
+    # rather than rebuilding it from host and port the way the default profile does.
+    jdbc-url: ${DATABASE_URL}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    # Neon's free tier caps connections well below the default, and Nirman is using the same
+    # cluster — this service is a relay and does not need to compete for them.
+    maximum-pool-size: 6
+    minimum-idle: 1
   api-docs:
     # A complete map of the API. Development wants it; a deployment carrying one contractor's
     # conversations does not publish it.

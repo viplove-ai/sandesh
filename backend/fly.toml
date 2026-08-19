@@ -1,5 +1,5 @@
 # Fly.io config for the Sandesh API.
-# Secrets (JWT_SECRET, DB_*, NIRMAN_DB_*, STORAGE_*) are set with `fly secrets set`, never
+# Secrets (JWT_SECRET, DATABASE_URL, DB_*, STORAGE_*) are set with `fly secrets set`, never
 # here — this file is committed and the repo is public.
 
 app = "sandesh-api"

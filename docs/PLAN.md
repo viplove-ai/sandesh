@@ -174,7 +174,7 @@ Deliberately the same as Nirman, so one engineer can move between them without a
 |---|---|---|
 | Backend | Spring Boot 3.3, Java 21 | Same parent POM version, same `BusinessException`/RFC-7807 error contract |
 | Transport | Spring WebSocket, raw JSON frames | **Not STOMP.** Twelve frame types do not need a broker protocol |
-| Spool | **Postgres** — same server, own database | No Redis. See §18. Durable across restart, which Redis was not |
+| Spool | **Postgres** — Nirman's database, own schema | No Redis. See §18. Durable across restart, which Redis was not |
 | Presence / member cache | In-JVM (Caffeine + a map) | Ephemeral by nature; a heartbeat is not worth a write |
 | Media | MinIO, bucket `chat-media`, 7-day lifecycle | Same server Nirman already runs |
 | Frontend | React 18 + Vite + MUI 6 + Dexie | Same versions as Nirman; theme copied, see §10 |
@@ -927,18 +927,32 @@ exactly one occasion: a device reconnecting and asking what it missed.
 
 ### Where it lives
 
-**Same Postgres server, separate database `sandesh`.** Two `DataSource` beans in Spring: one
-read-only against `nirman` for the two contract views, one read-write against `sandesh`.
+*Amended at the first production deploy. Draft 1 specified a separate database; it is now a
+schema inside Nirman's.*
 
-The cheaper option — a `chat` schema inside the Nirman database — saves one connection pool and
-costs the boundary §3 is built on: shared vacuum, shared backups, shared restore, and a chat
-table that can bloat Nirman's disk. Two `DataSource` beans is about twenty lines of
-configuration. That is a cheap price for keeping blast radius where the architecture says it is.
+**Nirman's database, a `sandesh` schema inside it.** One `DataSource`. Flyway creates the schema
+and keeps its own history table there, so neither service's migrations can see the other's;
+Hibernate resolves unqualified entity tables to `sandesh`, and the two contract views are read
+as `public.` explicitly, at every call site.
+
+The original decision was the other one, and its argument was not wrong — it is the price now
+being paid, and it should be stated rather than discovered: shared vacuum, shared backups,
+shared restore, and a chat table that can bloat the disk Nirman is using.
+
+What overturned it was credential arithmetic rather than the boundary. A second database meant a
+second role, a second connection string, and `chat_reader` again for the views: four values to
+hold in step across two systems, every one of them a way for the service to fail at boot with an
+error naming the wrong thing. What replaces the grant is narrower and honest about being
+narrower — this service reads Nirman's data through two views by convention, and
+`NirmanDirectoryService` remains the only class permitted to.
+
+The seam is still where §3 put it. If the boundary is ever wanted back, it is the schema that
+moves, not the callers.
 
 ### What is left to run
 
 Postgres and MinIO. Both are already running for Nirman. **Sandesh adds no new
-infrastructure at all** — one database and one bucket on servers that exist.
+infrastructure at all** — one schema and one bucket on servers that exist.
 
 ---
 

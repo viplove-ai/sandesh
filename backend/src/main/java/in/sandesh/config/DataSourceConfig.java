@@ -11,35 +11,35 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import javax.sql.DataSource;
 
 /**
- * Two connections, on purpose.
+ * One database, two schemas.
  *
- * <p>{@code sandesh} is this service's own database — the outbox, push subscriptions, settings.
- * JPA and Flyway own it. {@code nirman} is reached through a role that may only {@code SELECT}
- * from two contract views, and never through JPA: there are no entities for Nirman's tables here
- * and there must not be, because the views are the contract and the tables behind them are not.</p>
+ * <p>Sandesh's own tables live in {@code sandesh}; Nirman's contract views live in
+ * {@code public} on the same connection. An earlier draft gave this service its own database and
+ * a second read-only role, which bought a cleaner boundary and cost four credentials to keep in
+ * step across two systems — and every one of them was a way for the service to fail at boot with
+ * an error naming the wrong thing.</p>
  *
- * <p>A single shared database would have saved one pool and cost the boundary: shared vacuum,
- * shared backups, shared restore, and a chat table able to fill Nirman's disk.</p>
+ * <p>What is given up is real and worth naming: shared vacuum, shared backups, shared restore,
+ * and a chat table that can now fill the disk Nirman is using. What replaces the role boundary is
+ * a narrower one — this service reads Nirman's data only through two views, by convention rather
+ * than by grant, and {@code NirmanDirectoryService} is still the only class that may.</p>
  */
 @Configuration
 public class DataSourceConfig {
 
     @Bean
     @Primary
-    @ConfigurationProperties("app.datasource.sandesh")
-    public DataSource sandeshDataSource() {
+    @ConfigurationProperties("app.datasource")
+    public DataSource dataSource() {
         return DataSourceBuilder.create().type(HikariDataSource.class).build();
     }
 
+    /**
+     * How the directory reads the contract views. Named for what it is for rather than for what
+     * it connects to, so the one class allowed to touch Nirman's data still says so at the seam.
+     */
     @Bean
-    @ConfigurationProperties("app.datasource.nirman")
-    public DataSource nirmanDataSource() {
-        return DataSourceBuilder.create().type(HikariDataSource.class).build();
-    }
-
-    /** The only way this service reads anything of Nirman's. */
-    @Bean
-    public JdbcTemplate nirmanJdbc(DataSource nirmanDataSource) {
-        return new JdbcTemplate(nirmanDataSource);
+    public JdbcTemplate nirmanJdbc(DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
     }
 }

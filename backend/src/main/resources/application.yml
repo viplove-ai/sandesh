@@ -8,9 +8,19 @@ spring:
     properties:
       hibernate:
         jdbc.time_zone: UTC
+        # Unqualified entity tables resolve here. Nirman's views are reached with an explicit
+        # `public.` prefix instead, so nothing of ours can accidentally read or write there.
+        default_schema: sandesh
   flyway:
     enabled: true
     locations: classpath:db/migration
+    # Sandesh's migrations run inside their own schema and keep their own history table there,
+    # so they never see Nirman's and Nirman's never sees these. Sharing a database is only safe
+    # because of this line; without it two Flyway histories collide in `public` and each
+    # service decides the other has applied migrations out of order.
+    schemas: sandesh
+    default-schema: sandesh
+    create-schemas: true
     baseline-on-migrate: false
   jackson:
     default-property-inclusion: non_null
@@ -47,21 +57,13 @@ app:
     # Required by the spec and enforced by Apple's endpoint in particular.
     subject: ${VAPID_SUBJECT:mailto:admin@example.com}
   datasource:
-    # This service's own database. JPA and Flyway own it.
-    sandesh:
-      jdbc-url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:sandesh}
-      username: ${DB_USER:sandesh}
-      password: ${DB_PASSWORD:sandesh_dev_password}
-      maximum-pool-size: 10
-      minimum-idle: 2
-    # Nirman's, through a role that may only SELECT from the two contract views.
-    nirman:
-      jdbc-url: jdbc:postgresql://${NIRMAN_DB_HOST:localhost}:${NIRMAN_DB_PORT:5432}/${NIRMAN_DB_NAME:nirman}
-      username: ${NIRMAN_DB_USER:chat_reader}
-      password: ${NIRMAN_DB_PASSWORD:chat_reader_dev_password}
-      maximum-pool-size: 5
-      minimum-idle: 1
-      read-only: true
+    # Nirman's database. Sandesh owns the `sandesh` schema inside it and reads two views in
+    # `public`; it writes nothing outside its own schema.
+    jdbc-url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/nirman}
+    username: ${DB_USER:nirman}
+    password: ${DB_PASSWORD:nirman_dev_password}
+    maximum-pool-size: 10
+    minimum-idle: 2
   jwt:
     # The same secret Nirman signs with. Sandesh only ever verifies.
     secret: ${JWT_SECRET}

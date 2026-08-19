@@ -1,23 +1,25 @@
-# Local development. Sandesh adds no new kind of infrastructure: it wants a database on the
-# Postgres that is already running for Nirman and a bucket on the same MinIO.
+# Local development. Sandesh adds no new kind of infrastructure: it wants a schema in the
+# database that is already running for Nirman and a bucket on the same MinIO.
 #
-# `docker compose up -d` here brings up a Postgres with both databases and a MinIO, so the repo
-# stands alone. If you already run Nirman's stack, point .env at that one instead and skip this.
+# MinIO is the part of this file you want: `docker compose up -d minio minio-init`. The Postgres
+# below is a bare server and Sandesh cannot run against it alone — the directory reads Nirman's
+# two contract views, which exist only where Nirman's own migrations have been applied. Point
+# .env at Nirman's Postgres, or apply Nirman's schema to this one first.
 
 services:
   postgres:
     image: postgres:16-alpine
     container_name: sandesh-postgres
     environment:
-      POSTGRES_DB: ${DB_NAME:-sandesh}
-      POSTGRES_USER: ${DB_USER:-sandesh}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-sandesh_dev_password}
+      POSTGRES_DB: ${DB_NAME:-nirman}
+      POSTGRES_USER: ${DB_USER:-nirman}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-nirman_dev_password}
     ports:
       - "${DB_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sandesh} -d ${DB_NAME:-sandesh}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nirman} -d ${DB_NAME:-nirman}"]
       interval: 10s
       timeout: 5s
       retries: 10
