@@ -20,13 +20,29 @@ public interface OutboxRepository extends JpaRepository<OutboxEntry, UUID> {
     @Query("""
             SELECT o FROM OutboxEntry o
              WHERE o.recipientId = :recipientId
-               AND (:afterSentAt IS NULL OR o.sentAt > :afterSentAt
+             ORDER BY o.sentAt, o.msgId
+            """)
+    List<OutboxEntry> pendingFor(@Param("recipientId") UUID recipientId);
+
+    /**
+     * The same, resumed from the last event a device actually saw.
+     *
+     * <p>A second query rather than one carrying a nullable cursor. The single-query form spells
+     * the fresh connect as {@code :afterSentAt IS NULL}, and a null bind sitting alone in a null
+     * test gives PostgreSQL nothing to infer the parameter's type from — it refuses the statement
+     * outright with {@code could not determine data type of parameter $2}. That is the first
+     * connect of every device, which is the one path that must not fail.</p>
+     */
+    @Query("""
+            SELECT o FROM OutboxEntry o
+             WHERE o.recipientId = :recipientId
+               AND (o.sentAt > :afterSentAt
                     OR (o.sentAt = :afterSentAt AND o.msgId > :afterMsgId))
              ORDER BY o.sentAt, o.msgId
             """)
-    List<OutboxEntry> pendingFor(@Param("recipientId") UUID recipientId,
-                                 @Param("afterSentAt") Instant afterSentAt,
-                                 @Param("afterMsgId") UUID afterMsgId);
+    List<OutboxEntry> pendingForAfter(@Param("recipientId") UUID recipientId,
+                                      @Param("afterSentAt") Instant afterSentAt,
+                                      @Param("afterMsgId") UUID afterMsgId);
 
     @Modifying
     @Query("DELETE FROM OutboxEntry o WHERE o.recipientId = :recipientId AND o.msgId = :msgId")

@@ -163,7 +163,11 @@ public class MessageService {
     /** Everything this device has not acknowledged, oldest first. */
     @Transactional(readOnly = true)
     public List<Delivery> pendingFor(UUID recipientId, Instant afterSentAt, UUID afterMsgId) {
-        List<OutboxEntry> rows = outbox.pendingFor(recipientId, afterSentAt, afterMsgId);
+        // No cursor means a device connecting for the first time, and it takes the whole
+        // outbox. Both halves of the cursor or neither: half of one cannot order anything.
+        List<OutboxEntry> rows = (afterSentAt == null || afterMsgId == null)
+                ? outbox.pendingFor(recipientId)
+                : outbox.pendingForAfter(recipientId, afterSentAt, afterMsgId);
         Map<UUID, String> names = directory
                 .lookUp(rows.stream().map(OutboxEntry::getSenderId).distinct().toList())
                 .stream()
