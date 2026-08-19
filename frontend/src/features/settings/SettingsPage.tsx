@@ -1,0 +1,234 @@
+import { useEffect, useState } from 'react';
+import {
+  Alert, Box, Button, Chip, Divider, FormControlLabel, IconButton, Stack, Switch, TextField,
+  Typography,
+} from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useNavigate } from 'react-router-dom';
+import { apiClient, apiErrorDetail } from '../../shared/apiClient';
+import {
+  isInstalled, readHealth, requestPersistentStorage, sendTestNotification, webPush,
+  type PushHealth,
+} from '../../shared/push';
+import { tokens } from '../../app/theme';
+import { useAuth } from '../auth/AuthContext';
+
+interface Settings {
+  previewsEnabled: boolean;
+  quietFrom: string | null;
+  quietTo: string | null;
+  mutedConvIds: string[];
+}
+
+/**
+ * The Notification Health screen.
+ *
+ * Android OEM battery management — Xiaomi, Realme, Oppo, Vivo — is the biggest single threat to
+ * this app being useful, and it presents to the user as "I just don't get them". Half a dozen
+ * causes look identical from the outside: permission never granted, battery saver, restricted
+ * background data, an expired subscription, push not configured on the server at all.
+ *
+ * So the screen states what is actually known, and the test button splits the chain in half. It
+ * is the difference between support diagnosing this over the telephone and the user seeing it.
+ */
+export default function SettingsPage() {
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+  const [health, setHealth] = useState<PushHealth | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [persisted, setPersisted] = useState<boolean | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setHealth(await readHealth());
+        setSettings((await apiClient.get<Settings>('/push/settings')).data);
+        setPersisted(await navigator.storage?.persisted?.().catch(() => false) ?? false);
+      } catch (failure) {
+        setError(apiErrorDetail(failure));
+      }
+    })();
+  }, []);
+
+  async function enable() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await webPush.subscribe();
+      setHealth(await readHealth());
+      setMessage('This phone is registered.');
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : apiErrorDetail(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function test() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await sendTestNotification();
+      setMessage('Sent. If nothing appears within ten seconds, see the note below.');
+    } catch (failure) {
+      setError(apiErrorDetail(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(next: Settings) {
+    setSettings(next);
+    try {
+      await apiClient.put('/push/settings', next);
+    } catch (failure) {
+      setError(apiErrorDetail(failure));
+    }
+  }
+
+  const permission = webPush.supported() ? webPush.permission() : 'denied';
+
+  return (
+    <Box sx={{ maxWidth: 640, mx: 'auto', pb: 6 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{ p: 1, borderBottom: `1.6px solid ${tokens.ink}`, bgcolor: tokens.surface }}
+      >
+        <IconButton onClick={() => navigate('/')} aria-label="Back">
+          <ArrowBackIcon />
+        </IconButton>
+        <Typography variant="h3">Settings</Typography>
+      </Stack>
+
+      <Box sx={{ p: 2 }}>
+        {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+        {message && <Alert severity="success" sx={{ mb: 2 }}>{message}</Alert>}
+
+        <Typography variant="overline" color="text.secondary">
+          Notifications
+        </Typography>
+
+        <Stack direction="row" spacing={1} sx={{ my: 1, flexWrap: 'wrap', gap: 1 }}>
+          <Chip
+            size="small"
+            label={isInstalled() ? 'Installed' : 'Not installed'}
+            color={isInstalled() ? 'success' : 'warning'}
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={`Permission: ${permission}`}
+            color={permission === 'granted' ? 'success' : 'warning'}
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={`${health?.registeredDevices ?? 0} device(s) registered`}
+            color={(health?.registeredDevices ?? 0) > 0 ? 'success' : 'warning'}
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={persisted ? 'Storage kept' : 'Storage evictable'}
+            color={persisted ? 'success' : 'warning'}
+            variant="outlined"
+          />
+        </Stack>
+
+        {health && !health.pushConfiguredOnServer && (
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Notifications are not switched on for this deployment yet. Nothing on this phone will
+            fix that — it needs a VAPID key pair on the server.
+          </Alert>
+        )}
+
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Button variant="contained" color="secondary" onClick={enable} disabled={busy}>
+            Turn on for this phone
+          </Button>
+          <Button variant="outlined" onClick={test} disabled={busy}>
+            Send a test
+          </Button>
+        </Stack>
+
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <strong>If the test does not arrive.</strong> On Xiaomi, Redmi, Realme, Oppo and Vivo
+          phones the battery saver stops apps being woken. Open Settings → Apps → Chrome →
+          Battery and choose <em>No restrictions</em>, and turn off <em>Restrict background
+          data</em>. On an iPhone, notifications only work once the app has been added to the
+          Home Screen and opened from there.
+        </Alert>
+
+        {settings && (
+          <>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={settings.previewsEnabled}
+                  onChange={(e) => void save({ ...settings, previewsEnabled: e.target.checked })}
+                />
+              }
+              label="Show who sent it and what it says"
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Turn this off and notifications say only &ldquo;New message&rdquo;. Useful on a
+              phone other people pick up.
+            </Typography>
+
+            <Typography variant="overline" color="text.secondary">
+              Quiet hours
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 2 }}>
+              <TextField
+                type="time"
+                label="From"
+                InputLabelProps={{ shrink: true }}
+                value={settings.quietFrom ?? ''}
+                onChange={(e) => void save({ ...settings, quietFrom: e.target.value || null })}
+              />
+              <TextField
+                type="time"
+                label="To"
+                InputLabelProps={{ shrink: true }}
+                value={settings.quietTo ?? ''}
+                onChange={(e) => void save({ ...settings, quietTo: e.target.value || null })}
+              />
+            </Stack>
+          </>
+        )}
+
+        <Divider sx={{ my: 3 }} />
+
+        <Typography variant="overline" color="text.secondary">
+          This phone
+        </Typography>
+        <Alert severity="info" sx={{ my: 1 }}>
+          <strong>This phone is the only copy of your conversations.</strong> Nothing is kept on
+          the server once a message has been delivered. If you lose this phone, or clear the
+          app&rsquo;s data, these conversations are gone.
+        </Alert>
+        {!persisted && (
+          <Button
+            variant="outlined"
+            sx={{ mb: 2 }}
+            onClick={async () => setPersisted(await requestPersistentStorage())}
+          >
+            Ask the browser to keep them
+          </Button>
+        )}
+
+        <Divider sx={{ my: 3 }} />
+        <Button variant="outlined" color="error" onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </Box>
+    </Box>
+  );
+}

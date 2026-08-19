@@ -3,6 +3,8 @@ import {
   Alert, Box, CircularProgress, Divider, List, ListItemButton, ListItemText, Stack,
   TextField, Typography,
 } from '@mui/material';
+import SettingsIcon from '@mui/icons-material/Settings';
+import { IconButton } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useConversations, useDirectory } from './api';
 import { useAuth } from '../auth/AuthContext';
@@ -21,9 +23,14 @@ export default function ConversationsPage() {
 
   return (
     <Box sx={{ p: 2, maxWidth: 720, mx: 'auto' }}>
-      <Typography variant="overline" color="text.secondary">
-        Conversations
-      </Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography variant="overline" color="text.secondary">
+          Conversations
+        </Typography>
+        <IconButton onClick={() => navigate('/settings')} aria-label="Settings">
+          <SettingsIcon />
+        </IconButton>
+      </Stack>
 
       {conversations.isLoading && <CircularProgress size={24} sx={{ mt: 2 }} />}
       {conversations.isError && (

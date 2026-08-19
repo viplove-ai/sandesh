@@ -15,6 +15,17 @@ committed):
 ALTER ROLE chat_reader WITH PASSWORD '<the value you put in NIRMAN_DB_PASSWORD>';
 ```
 
+## 1b. The chat permissions
+
+Copy `V44__chat_permissions.sql` across the same way. It seeds `chat:restrict` and
+`chat:announce` and grants both to ADMIN.
+
+The explicit grant is not redundant. `V2` gives ADMIN every permission with a `CROSS JOIN` and
+its comment claims "present and future migrations included" — but that statement is a one-time
+insert and cannot grant a permission that did not exist when it ran. Every later migration that
+adds one re-grants it (see `V25__site_equipment.sql`). Without it nobody can block a user or
+post an announcement, and nothing in the interface says why.
+
 ## 2. The CORS origin
 
 In `nirman/backend/src/main/resources/application-prod.yml` (or the Fly secret backing

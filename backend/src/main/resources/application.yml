@@ -36,6 +36,16 @@ server:
       max: 200
 
 app:
+  timezone: Asia/Kolkata
+  push:
+    # Blank keys switch push off rather than failing at startup: the pilot has to be able to run
+    # before somebody has generated a pair, and a service that will not boot without one cannot
+    # be tried. Generate with:  npx web-push generate-vapid-keys
+    enabled: ${PUSH_ENABLED:true}
+    public-key: ${VAPID_PUBLIC_KEY:}
+    private-key: ${VAPID_PRIVATE_KEY:}
+    # Required by the spec and enforced by Apple's endpoint in particular.
+    subject: ${VAPID_SUBJECT:mailto:admin@example.com}
   datasource:
     # This service's own database. JPA and Flyway own it.
     sandesh:

@@ -1,9 +1,11 @@
 import { createBrowserRouter, Outlet } from 'react-router-dom';
 import { AuthProvider } from '../features/auth/AuthContext';
 import RootLayout from './RootLayout';
+import InstallGate from './InstallGate';
 import LoginPage from '../features/auth/LoginPage';
 import ConversationsPage from '../features/conversations/ConversationsPage';
 import ThreadPage from '../features/messages/ThreadPage';
+import SettingsPage from '../features/settings/SettingsPage';
 
 /**
  * AuthProvider sits above every route, /login included, so signIn can navigate on success and
@@ -12,9 +14,11 @@ import ThreadPage from '../features/messages/ThreadPage';
 export const router = createBrowserRouter([
   {
     element: (
-      <AuthProvider>
-        <Outlet />
-      </AuthProvider>
+      <InstallGate>
+        <AuthProvider>
+          <Outlet />
+        </AuthProvider>
+      </InstallGate>
     ),
     children: [
       { path: '/login', element: <LoginPage /> },
@@ -23,6 +27,7 @@ export const router = createBrowserRouter([
         children: [
           { path: '/', element: <ConversationsPage /> },
           { path: '/c/:convId', element: <ThreadPage /> },
+          { path: '/settings', element: <SettingsPage /> },
         ],
       },
     ],

@@ -12,7 +12,7 @@ import java.util.UUID;
  */
 public record ConversationId(Kind kind, UUID a, UUID b) {
 
-    public enum Kind { SITE, PROJECT, DIRECT }
+    public enum Kind { SITE, PROJECT, DIRECT, ORG }
 
     public static ConversationId site(UUID siteId) {
         return new ConversationId(Kind.SITE, siteId, null);
@@ -20,6 +20,14 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
 
     public static ConversationId project(UUID projectId) {
         return new ConversationId(Kind.PROJECT, projectId, null);
+    }
+
+    /**
+     * The announcements channel. Every active user belongs to it regardless of posting, which is
+     * what stops an accountant or a new hire opening an app with nothing in it at all.
+     */
+    public static ConversationId org(UUID orgId) {
+        return new ConversationId(Kind.ORG, orgId, null);
     }
 
     /** Sorted, because {@code dm:x:y} and {@code dm:y:x} must not be two conversations. */
@@ -35,6 +43,7 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
             return switch (parts[0]) {
                 case "site" -> site(UUID.fromString(parts[1]));
                 case "proj" -> project(UUID.fromString(parts[1]));
+                case "org" -> org(UUID.fromString(parts[1]));
                 case "dm" -> direct(UUID.fromString(parts[1]), UUID.fromString(parts[2]));
                 default -> throw new IllegalArgumentException(parts[0]);
             };
@@ -57,6 +66,7 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
         return switch (kind) {
             case SITE -> "site:" + a;
             case PROJECT -> "proj:" + a;
+            case ORG -> "org:" + a;
             case DIRECT -> "dm:" + a + ":" + b;
         };
     }

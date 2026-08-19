@@ -21,6 +21,7 @@
         <java.version>21</java.version>
         <jjwt.version>0.12.6</jjwt.version>
         <minio.version>8.5.13</minio.version>
+        <webpush.version>5.1.1</webpush.version>
         <springdoc.version>2.6.0</springdoc.version>
     </properties>
 
@@ -81,6 +82,17 @@
             <artifactId>jjwt-jackson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
+        </dependency>
+
+        <!--
+          Web Push over VAPID. No vendor SDK and no Firebase: the payload is encrypted to the
+          browser's own key, so Google and Apple carry it without being able to read it, which
+          is what lets a notification safely carry a preview.
+        -->
+        <dependency>
+            <groupId>nl.martijndwars</groupId>
+            <artifactId>web-push</artifactId>
+            <version>${webpush.version}</version>
         </dependency>
 
         <!-- Media objects. Same server Nirman already runs, a different bucket. -->

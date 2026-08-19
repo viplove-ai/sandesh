@@ -39,6 +39,8 @@ public class NirmanDirectoryService implements NirmanDirectory {
             Caffeine.newBuilder().expireAfterWrite(WINDOW).maximumSize(10_000).build();
     private final Cache<UUID, List<Person>> siteMemberCache =
             Caffeine.newBuilder().expireAfterWrite(WINDOW).maximumSize(5_000).build();
+    private final Cache<UUID, List<Person>> orgMemberCache =
+            Caffeine.newBuilder().expireAfterWrite(WINDOW).maximumSize(100).build();
 
     public NirmanDirectoryService(JdbcTemplate nirmanJdbc) {
         this.jdbc = nirmanJdbc;
@@ -81,6 +83,15 @@ public class NirmanDirectoryService implements NirmanDirectory {
                   JOIN chat_directory_v d ON d.user_id = m.user_id
                  WHERE m.site_id = ? AND d.is_active = true
                  ORDER BY d.full_name
+                """, PERSON, id));
+    }
+
+    @Override
+    public List<Person> membersOfOrg(UUID orgId) {
+        return orgMemberCache.get(orgId, id -> jdbc.query("""
+                SELECT user_id, org_id, full_name, username
+                  FROM chat_directory_v WHERE org_id = ? AND is_active = true
+                 ORDER BY full_name
                 """, PERSON, id));
     }
 

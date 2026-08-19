@@ -28,6 +28,9 @@ public interface NirmanDirectory {
     /** Everyone posted to the site today — the site conversation's member list. */
     List<Person> membersOfSite(UUID siteId);
 
+    /** Everyone active in the organisation — the announcements channel's member list. */
+    List<Person> membersOfOrg(UUID orgId);
+
     List<Person> lookUp(List<UUID> userIds);
 
     /** Org-wide directory search, because a person with no posting still has colleagues. */

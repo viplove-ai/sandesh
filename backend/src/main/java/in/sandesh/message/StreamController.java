@@ -2,6 +2,7 @@ package in.sandesh.message;
 
 import in.sandesh.message.MessageDtos.Delivery;
 import in.sandesh.security.AuthenticatedUser;
+import in.sandesh.moderation.RestrictionGuard;
 import in.sandesh.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -45,6 +46,7 @@ public class StreamController {
     private final MessageService messages;
     private final StreamRegistry streams;
     private final CurrentUser currentUser;
+    private final RestrictionGuard restrictions;
     private final long maxMinutes;
     private final long heartbeatSeconds;
     private final ScheduledExecutorService heartbeats =
@@ -55,11 +57,13 @@ public class StreamController {
             });
 
     public StreamController(MessageService messages, StreamRegistry streams, CurrentUser currentUser,
+                            RestrictionGuard restrictions,
                             @Value("${app.stream.max-minutes:10}") long maxMinutes,
                             @Value("${app.stream.heartbeat-seconds:25}") long heartbeatSeconds) {
         this.messages = messages;
         this.streams = streams;
         this.currentUser = currentUser;
+        this.restrictions = restrictions;
         this.maxMinutes = maxMinutes;
         this.heartbeatSeconds = heartbeatSeconds;
     }
@@ -68,6 +72,7 @@ public class StreamController {
     @Operation(summary = "Open the message stream and replay anything this device has not acked")
     public SseEmitter open(@RequestHeader(value = "Last-Event-ID", required = false) String lastEventId) {
         AuthenticatedUser user = currentUser.required();
+        restrictions.assertMayConnect(user.userId());
 
         // Deliberately finite. The authorisation snapshot is taken when the connection opens, so
         // capping its life is what bounds how long a revoked assignment can keep receiving —

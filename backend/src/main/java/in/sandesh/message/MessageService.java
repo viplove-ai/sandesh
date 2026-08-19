@@ -6,6 +6,8 @@ import in.sandesh.common.BusinessException;
 import in.sandesh.conversation.ConversationId;
 import in.sandesh.conversation.ConversationService;
 import in.sandesh.directory.NirmanDirectory;
+import in.sandesh.moderation.RestrictionGuard;
+import in.sandesh.notify.Notifier;
 import in.sandesh.message.MessageDtos.Delivery;
 import in.sandesh.message.MessageDtos.MediaRef;
 import in.sandesh.message.MessageDtos.SendRequest;
@@ -48,24 +50,30 @@ public class MessageService {
     private final ConversationService conversations;
     private final NirmanDirectory directory;
     private final StreamRegistry streams;
+    private final RestrictionGuard restrictions;
+    private final Notifier notifier;
     private final ObjectMapper json;
     private final int sweepAfterDays;
 
     public MessageService(OutboxRepository outbox, MessageIdempotencyRepository ledger,
                           ConversationService conversations, NirmanDirectory directory,
-                          StreamRegistry streams, ObjectMapper json,
+                          StreamRegistry streams, RestrictionGuard restrictions,
+                          Notifier notifier, ObjectMapper json,
                           @Value("${app.outbox.sweep-after-days:7}") int sweepAfterDays) {
         this.outbox = outbox;
         this.ledger = ledger;
         this.conversations = conversations;
         this.directory = directory;
         this.streams = streams;
+        this.restrictions = restrictions;
+        this.notifier = notifier;
         this.json = json;
         this.sweepAfterDays = sweepAfterDays;
     }
 
     @Transactional
     public SendResponse send(SendRequest request, AuthenticatedUser sender) {
+        restrictions.assertMaySend(sender.userId());
         if (!KINDS.contains(request.kind())) {
             throw new BusinessException("message.kind", "Unknown message kind.",
                     HttpStatus.UNPROCESSABLE_ENTITY);
@@ -121,10 +129,10 @@ public class MessageService {
         for (OutboxEntry row : rows) {
             boolean live = streams.push(row.getRecipientId(), eventId(row), toDelivery(row, senderName));
             if (!live) {
-                // Nobody is holding a connection for them. Phase 3 wakes the phone here; until
-                // then the message simply waits, which is what the outbox is for.
-                log.debug("No live stream for {}; message {} waits in the outbox",
-                        row.getRecipientId(), row.getMsgId());
+                // Nobody is holding a connection for them, so wake the phone. The message is
+                // already durable in the outbox — this only decides whether they find out now
+                // or the next time they open the app.
+                wake(row, senderName);
             }
         }
     }
@@ -176,6 +184,29 @@ public class MessageService {
         if (spooled > 0 || ledgered > 0) {
             log.info("Swept {} undelivered messages and {} idempotency rows older than {} days",
                     spooled, ledgered, sweepAfterDays);
+        }
+    }
+
+    /**
+     * The notification carries enough to render itself, deliberately.
+     *
+     * <p>iOS forbids a push that shows nothing, so the "ping then fetch" shape is not available:
+     * whatever arrives here has to be a complete notification on its own. Collapsed by
+     * conversation, so twenty messages in a site channel are one line and not twenty.</p>
+     */
+    private void wake(OutboxEntry row, String senderName) {
+        String preview = switch (row.getKind()) {
+            case "IMAGE" -> "sent a photograph";
+            case "DOC" -> "sent a document";
+            default -> row.getBody() == null ? "sent a message" : row.getBody();
+        };
+        try {
+            notifier.notify(row.getRecipientId(), new Notifier.Notification(
+                    senderName, preview, "/c/" + row.getConvId(), row.getConvId(),
+                    (int) Math.min(Integer.MAX_VALUE, pendingCount(row.getRecipientId()))));
+        } catch (RuntimeException e) {
+            // A push service having a bad afternoon must never fail a send that already worked.
+            log.warn("Could not notify {}", row.getRecipientId(), e);
         }
     }
 

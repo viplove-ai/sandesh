@@ -13,6 +13,11 @@ export default defineConfig({
       manifest: false,
       manifestFilename: 'brand/manifest.webmanifest',
       workbox: {
+        // Pulled into the generated worker rather than registered beside it: two service
+        // workers racing to control one page is a class of bug that presents as "notifications
+        // sometimes work". Plain JS in public/ so it is copied verbatim and importScripts finds
+        // a real file at that path.
+        importScripts: ['/sw-push.js'],
         globPatterns: ['**/*.{js,css,html,svg,png,woff2,webmanifest}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api/],

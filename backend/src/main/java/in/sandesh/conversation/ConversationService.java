@@ -24,6 +24,9 @@ import java.util.stream.Collectors;
 @Service
 public class ConversationService {
 
+    /** Seeded by a Nirman migration, following its convention that a permission is a migration. */
+    private static final String ANNOUNCE = "chat:announce";
+
     private final NirmanDirectory directory;
 
     public ConversationService(NirmanDirectory directory) {
@@ -54,6 +57,13 @@ public class ConversationService {
                 ConversationId.project(projectId).toString(), "PROJECT",
                 name, "Everyone on this project", List.of())));
 
+        // Everybody gets this one, posting or not. It is the answer to an app that opens empty
+        // for an accountant, an administrator or a new hire — and to "send something to the
+        // whole team", which was the other thing asked of this product.
+        out.add(0, new ConversationView(
+                ConversationId.org(user.orgId()).toString(), "ORG",
+                "Announcements", "Everyone at your company", List.of()));
+
         return out;
     }
 
@@ -80,6 +90,19 @@ public class ConversationService {
                         .collect(Collectors.toSet());
                 requireMember(members, sender, "That project is not assigned to you.");
                 yield members;
+            }
+            case ORG -> {
+                if (!conversation.a().equals(sender.orgId())) {
+                    throw BusinessException.forbidden("That is not your organisation.");
+                }
+                // Everyone reads; only chat:announce writes. This is the one channel where
+                // membership and the right to post are different questions.
+                if (!sender.hasPermission(ANNOUNCE) && !sender.isAdmin()) {
+                    throw BusinessException.forbidden(
+                            "Only an administrator can post an announcement.");
+                }
+                yield directory.membersOfOrg(sender.orgId()).stream()
+                        .map(NirmanDirectory.Person::userId).collect(Collectors.toSet());
             }
             case DIRECT -> {
                 if (!conversation.a().equals(sender.userId())

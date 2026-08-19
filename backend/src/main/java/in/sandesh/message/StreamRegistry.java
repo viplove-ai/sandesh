@@ -79,6 +79,27 @@ public class StreamRegistry {
         return delivered;
     }
 
+    /**
+     * Closes every connection this person is holding, now.
+     *
+     * <p>A block that leaves the stream open is not a block. Everything else in this service is
+     * content to take effect inside the 120-second authorisation window; this is the one act
+     * where two minutes of grace is the wrong answer.</p>
+     */
+    public void disconnect(UUID userId) {
+        Set<SseEmitter> emitters = byUser.remove(userId);
+        if (emitters == null) {
+            return;
+        }
+        for (SseEmitter emitter : emitters) {
+            try {
+                emitter.complete();
+            } catch (RuntimeException alreadyGone) {
+                log.debug("Emitter for {} was already closed", userId);
+            }
+        }
+    }
+
     public int connectionCount() {
         return byUser.values().stream().mapToInt(Set::size).sum();
     }

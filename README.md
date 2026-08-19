@@ -8,8 +8,13 @@ part that is company business.
 The full design — and the reasoning behind every decision below — is in
 [`docs/PLAN.md`](docs/PLAN.md). This README is how to run it.
 
-> **Status: Weeks 1–3 of the pilot** (`docs/PLAN.md` §24). Login, conversations, text and the
-> media endpoints work. Notifications are Week 4 and are **not built yet**.
+> **Status: Weeks 1–4 of the pilot** (`docs/PLAN.md` §24), plus announcements and moderation.
+> Login, conversations, text, photographs, Web Push with a notification health screen, the
+> install gate, an org-wide announcements channel, and mute/block/report with an audit trail.
+>
+> Push stays switched off until `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are set — blank keys
+> disable it rather than failing at boot, because the pilot has to be able to run before
+> somebody has generated a pair. Generate one with `npx web-push generate-vapid-keys`.
 
 ## What it is, in four lines
 
@@ -175,6 +180,20 @@ sign-in fails at the preflight.
 
 ## What is deliberately not here yet
 
-Notifications (Week 4), documents, retention, admin blocking, the action channel, read receipts
-and typing. Each is cut on purpose and the reasoning is in `docs/PLAN.md` §24 — the pilot exists
-to answer two questions, and everything above only helps answer them at scale.
+Documents, retention (§15 — gated on counsel, not on engineering), the action channel (§16), the
+device eviction ladder (§22), read receipts and typing. Each is cut on purpose and the reasoning
+is in `docs/PLAN.md` §24 — the pilot exists to answer two questions, and everything above only
+helps answer them at scale.
+
+## Turning notifications on
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+```bash
+flyctl secrets set --app sandesh-api VAPID_PUBLIC_KEY='B...' VAPID_PRIVATE_KEY='...' VAPID_SUBJECT='mailto:you@example.com'
+```
+
+The public key is served to the browser by `/api/v1/push/health`, so it is not duplicated into
+the frontend build and rotating it does not need a redeploy of the web app.
