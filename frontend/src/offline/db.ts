@@ -24,6 +24,12 @@ export interface StoredMessage {
   mediaFileName?: string;
   mediaContentType?: string;
   mediaSizeBytes?: number;
+  /**
+   * The full-size original has been dropped to make room; the thumbnail and the text remain.
+   * For a site or project channel the server still has it and a tap re-fetches. For a direct
+   * message it is gone, and the interface has to say so rather than showing a broken image.
+   */
+  mediaEvicted?: boolean;
   /** A data URL for the thumbnail. Kept as long as the text; the original is evictable. */
   thumbnail?: string;
   sentAt: string;

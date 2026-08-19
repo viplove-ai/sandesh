@@ -141,6 +141,10 @@ export class MessageStream {
     });
     if (id) await writeCursor(id);
 
+    // Deliberately no media download here. An arriving message carries a reference and a
+    // thumbnail; the full-size original is fetched when somebody taps it. Pulling every
+    // photograph eagerly would fill a phone with files nobody opened, over a connection that
+    // is the scarce thing in the first place.
     await apiClient.post(`/messages/${delivery.msgId}/ack`).catch(() => {
       // The ack is lost, not the message. The server redelivers and the put above overwrites.
     });

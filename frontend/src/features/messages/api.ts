@@ -1,5 +1,7 @@
 import { apiClient } from '../../shared/apiClient';
 import { db, markSent, type StoredMessage } from '../../offline/db';
+import { mediaStore } from '../../offline/mediaStore';
+import { evictIfNeeded } from '../../offline/eviction';
 import { DOCUMENT_MAX_BYTES, preparePhoto } from '../../shared/uploads';
 
 export interface SendResponse {
@@ -121,6 +123,9 @@ export async function sendImage(convId: string, file: File, me: { id: string; fu
 
     await markSent(clientMsgId, data.msgId, data.sentAt);
     await db.messages.update(data.msgId, { mediaId: upload.mediaId });
+    // Our own copy, so the sender is not re-downloading a photograph they took.
+    await mediaStore.put(upload.mediaId, photo.blob);
+    await evictIfNeeded();
     return data;
   } catch (failure) {
     await db.messages.put({ ...optimistic, state: 'failed' });
@@ -182,9 +187,38 @@ export async function sendDocument(
 
     await markSent(clientMsgId, data.msgId, data.sentAt);
     await db.messages.update(data.msgId, { mediaId: upload.mediaId });
+    await mediaStore.put(upload.mediaId, file);
+    await evictIfNeeded();
     return data;
   } catch (failure) {
     await db.messages.put({ ...optimistic, state: 'failed' });
     throw failure;
   }
+}
+
+/**
+ * Open a file, from the device if it is still here and from the server if it is not.
+ *
+ * The re-fetch is what makes the eviction ladder safe: dropping a site channel's original costs
+ * a download rather than the file. A direct message has no server copy, so an evicted one is
+ * genuinely gone and the caller is told rather than shown a broken image.
+ */
+export async function openMedia(message: {
+  mediaId?: string;
+  convId: string;
+  mediaEvicted?: boolean;
+}): Promise<string> {
+  if (!message.mediaId) throw new Error('That message has no file.');
+
+  const local = await mediaStore.get(message.mediaId);
+  if (local) return URL.createObjectURL(local);
+
+  if (message.convId.startsWith('dm:')) {
+    throw new Error(
+      'This file was removed from the phone to free space, and direct messages are not kept on the server.',
+    );
+  }
+
+  const { downloadUrl } = await requestDownloadUrl(message.mediaId);
+  return downloadUrl;
 }

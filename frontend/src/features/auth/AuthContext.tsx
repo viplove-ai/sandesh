@@ -11,6 +11,7 @@ import {
 } from '../../shared/session';
 import { forgetEverything } from '../../offline/db';
 import { messageStream } from '../../shared/stream';
+import { evictIfNeeded } from '../../offline/eviction';
 import { queryClient } from '../../app/queryClient';
 
 interface AuthState {
@@ -40,6 +41,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(session.user);
         setStatus('signedIn');
         messageStream.start();
+        // Once per start, and cheap when there is nothing to do. Making room before the browser
+        // makes it for us: hitting the quota raises QuotaExceededError in the middle of a write,
+        // and a half-written record is worse than a missing one.
+        void evictIfNeeded();
       } catch {
         // A refusal signs the device out. A network failure leaves the stored token where it is
         // and opens on the cached profile — a supervisor in a valley still needs the app.

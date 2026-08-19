@@ -11,6 +11,9 @@ import {
   type PushHealth,
 } from '../../shared/push';
 import { tokens } from '../../app/theme';
+import { mediaStore, type StorageUsage } from '../../offline/mediaStore';
+import { runEviction } from '../../offline/eviction';
+import { describeBytes } from '../../shared/uploads';
 import { useAuth } from '../auth/AuthContext';
 
 interface Settings {
@@ -40,6 +43,7 @@ export default function SettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<StorageUsage | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -47,6 +51,7 @@ export default function SettingsPage() {
         setHealth(await readHealth());
         setSettings((await apiClient.get<Settings>('/push/settings')).data);
         setPersisted(await navigator.storage?.persisted?.().catch(() => false) ?? false);
+        setUsage(await mediaStore.usage());
       } catch (failure) {
         setError(apiErrorDetail(failure));
       }
@@ -222,6 +227,45 @@ export default function SettingsPage() {
           >
             Ask the browser to keep them
           </Button>
+        )}
+
+        <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
+          Space used
+        </Typography>
+        {usage && usage.quota > 0 && (
+          <>
+            <Typography variant="body2" sx={{ fontFamily: 'monospace', mb: 1 }}>
+              {describeBytes(usage.used)} of {describeBytes(usage.quota)} (
+              {Math.round((usage.used / usage.quota) * 100)}%)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Photographs are much larger than messages. When space runs short, Sandesh removes
+              the full-size copies from site conversations first — those are still on the server
+              and come back when you tap them. Photographs in direct messages are removed last,
+              because nothing else has a copy.
+            </Typography>
+            <Button
+              variant="outlined"
+              sx={{ mb: 2 }}
+              onClick={async () => {
+                setBusy(true);
+                const report = await runEviction(await mediaStore.usage());
+                setUsage(await mediaStore.usage());
+                setBusy(false);
+                setMessage(
+                  report.evicted === 0
+                    ? 'Nothing to free — everything here is recent or already trimmed.'
+                    : `Freed ${describeBytes(report.freedBytes)} from ${report.evicted} file(s)` +
+                      (report.unbackedEvicted > 0
+                        ? `, including ${report.unbackedEvicted} from direct messages, which are now gone.`
+                        : '.'),
+                );
+              }}
+              disabled={busy}
+            >
+              Free up space now
+            </Button>
+          </>
         )}
 
         <Divider sx={{ my: 3 }} />

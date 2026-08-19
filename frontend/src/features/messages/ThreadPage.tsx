@@ -7,7 +7,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../offline/db';
-import { requestDownloadUrl, sendDocument, sendImage, sendText } from './api';
+import { openMedia as resolveMedia, sendDocument, sendImage, sendText } from './api';
 import {
   ACCEPT_ATTRIBUTE, describeBytes, isSendableDocument, isSendableImage,
 } from '../../shared/uploads';
@@ -69,12 +69,15 @@ export default function ThreadPage() {
     }
   }
 
-  async function openMedia(mediaId: string) {
+  async function openMedia(message: {
+    mediaId?: string;
+    convId: string;
+    mediaEvicted?: boolean;
+  }) {
     try {
-      const { downloadUrl } = await requestDownloadUrl(mediaId);
-      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
+      window.open(await resolveMedia(message), '_blank', 'noopener,noreferrer');
     } catch (failure) {
-      setError(apiErrorDetail(failure));
+      setError(failure instanceof Error ? failure.message : apiErrorDetail(failure));
     }
   }
 
@@ -128,7 +131,7 @@ export default function ThreadPage() {
                   component="img"
                   src={message.thumbnail}
                   alt={message.mediaFileName ?? 'Photograph'}
-                  onClick={() => message.mediaId && void openMedia(message.mediaId)}
+                  onClick={() => void openMedia(message)}
                   sx={{
                     display: 'block',
                     maxWidth: '100%',
@@ -143,7 +146,7 @@ export default function ThreadPage() {
                   direction="row"
                   spacing={1}
                   alignItems="center"
-                  onClick={() => message.mediaId && void openMedia(message.mediaId)}
+                  onClick={() => void openMedia(message)}
                   sx={{ cursor: message.mediaId ? 'pointer' : 'default', mb: message.body ? 0.75 : 0 }}
                 >
                   <DescriptionIcon fontSize="small" sx={{ color: tokens.annotation }} />
