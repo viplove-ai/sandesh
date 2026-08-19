@@ -24,9 +24,23 @@ export default function ConversationsPage() {
   return (
     <Box sx={{ p: 2, maxWidth: 720, mx: 'auto' }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="overline" color="text.secondary">
-          Conversations
-        </Typography>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          {/* The mark on its own, not the lockup cropped: the lockup's endorsement line is the
+              half that matters, so it is shown whole or not at all. */}
+          <Box
+            component="img"
+            src="/brand/icon-512.png"
+            alt=""
+            sx={{
+              width: 34,
+              height: 34,
+              borderRadius: '9px 6px 10px 7px/7px 10px 6px 9px',
+            }}
+          />
+          <Typography variant="overline" color="text.secondary">
+            Conversations
+          </Typography>
+        </Stack>
         <IconButton onClick={() => navigate('/settings')} aria-label="Settings">
           <SettingsIcon />
         </IconButton>

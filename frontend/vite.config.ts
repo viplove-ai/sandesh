@@ -8,8 +8,14 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Never swap a new build in under somebody mid-message. Same reasoning as Nirman.
-      registerType: 'prompt',
+      /*
+        'autoUpdate' as specified in the brand handoff. Worth knowing what it trades: a new build
+        activates on its own, so a phone can reload while somebody is part-way through typing.
+        Nirman chose 'prompt' for exactly that reason. Switch this back to 'prompt' if a
+        supervisor ever loses a message to it — the rest of the brand wiring does not depend on
+        which one is set.
+      */
+      registerType: 'autoUpdate',
       manifest: false,
       manifestFilename: 'brand/manifest.webmanifest',
       workbox: {

@@ -3,7 +3,6 @@ import { Alert, Box, Button, Paper, Stack, TextField, Typography } from '@mui/ma
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import { apiErrorDetail } from '../../shared/apiClient';
-import { HAND } from '../../app/theme';
 
 export default function LoginPage() {
   const { signIn } = useAuth();
@@ -30,9 +29,16 @@ export default function LoginPage() {
   return (
     <Box sx={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', p: 2 }}>
       <Paper variant="outlined" sx={{ p: 3, width: '100%', maxWidth: 400 }}>
-        <Typography variant="h1" sx={{ fontFamily: HAND, mb: 0.5 }}>
-          Sandesh
-        </Typography>
+        {/* The lockup carries its own paper-white bed (#FFFDF7), so it belongs on the card
+            rather than on the ground behind it. The "BY NIRMAN" endorsement line is never
+            cropped — it is what tells somebody this is the same company as the app they
+            already sign into. */}
+        <Box
+          component="img"
+          src="/brand/logo-lockup.png"
+          alt="Sandesh by Nirman"
+          sx={{ width: 240, height: 'auto', display: 'block', mx: 'auto', mb: 3 }}
+        />
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
           Sign in with your Nirman username and password. There is no separate account.
         </Typography>

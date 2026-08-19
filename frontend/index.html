@@ -3,10 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#F7F3E9" />
+
+    <!-- Brand wiring — see docs/brand/README.md. The manifest in public/brand/ is the source
+         of truth; vite-plugin-pwa is configured with manifest:false so it cannot inject a
+         competing one, which would be settled by whichever <link> the browser read last. -->
     <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/brand/favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
     <link rel="manifest" href="/brand/manifest.webmanifest" />
-    <title>Sandesh</title>
+    <meta name="theme-color" content="#C2410C" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Sandesh" />
+
+    <title>Sandesh — Notices</title>
   </head>
   <body>
     <div id="root"></div>
