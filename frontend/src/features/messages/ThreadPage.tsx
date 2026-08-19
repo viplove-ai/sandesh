@@ -2,10 +2,12 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Alert, Box, IconButton, Paper, Stack, TextField, Typography } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../offline/db';
-import { sendText } from './api';
+import { requestDownloadUrl, sendImage, sendText } from './api';
+import { isSendableImage } from '../../shared/uploads';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorDetail } from '../../shared/apiClient';
 import { tokens } from '../../app/theme';
@@ -17,6 +19,7 @@ export default function ThreadPage() {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
+  const filePicker = useRef<HTMLInputElement>(null);
 
   // Straight from the device's own store. Messages are never fetched over HTTP — they arrive on
   // the stream and are read from here, which is what makes the thread render with no signal.
@@ -38,6 +41,31 @@ export default function ThreadPage() {
     setError(null);
     try {
       await sendText(convId, body, { id: user.id, fullName: user.fullName });
+    } catch (failure) {
+      setError(apiErrorDetail(failure));
+    }
+  }
+
+  async function attach(file: File | undefined) {
+    if (!file || !user) return;
+    setError(null);
+    if (!isSendableImage(file)) {
+      // Documents are Week 4 of the pilot. Say which, rather than failing silently — a
+      // supervisor who tries a PDF and gets nothing concludes the app is broken.
+      setError('Photographs only for now. Documents are coming after the trial.');
+      return;
+    }
+    try {
+      await sendImage(convId, file, { id: user.id, fullName: user.fullName });
+    } catch (failure) {
+      setError(apiErrorDetail(failure));
+    }
+  }
+
+  async function openMedia(mediaId: string) {
+    try {
+      const { downloadUrl } = await requestDownloadUrl(mediaId);
+      window.open(downloadUrl, '_blank', 'noopener,noreferrer');
     } catch (failure) {
       setError(apiErrorDetail(failure));
     }
@@ -88,9 +116,26 @@ export default function ThreadPage() {
                   {message.fromName}
                 </Typography>
               )}
-              <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                {message.body}
-              </Typography>
+              {message.kind === 'IMAGE' && message.thumbnail && (
+                <Box
+                  component="img"
+                  src={message.thumbnail}
+                  alt={message.mediaFileName ?? 'Photograph'}
+                  onClick={() => message.mediaId && void openMedia(message.mediaId)}
+                  sx={{
+                    display: 'block',
+                    maxWidth: '100%',
+                    borderRadius: '8px',
+                    cursor: message.mediaId ? 'pointer' : 'default',
+                    mb: message.body ? 0.75 : 0,
+                  }}
+                />
+              )}
+              {message.body && (
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {message.body}
+                </Typography>
+              )}
               {message.state === 'failed' && (
                 <Typography variant="caption" sx={{ color: tokens.stop }}>
                   Not sent
@@ -109,6 +154,23 @@ export default function ThreadPage() {
         onSubmit={submit}
         sx={{ display: 'flex', gap: 1, p: 1, borderTop: `1.6px solid ${tokens.ink}`, bgcolor: tokens.surface }}
       >
+        <input
+          ref={filePicker}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          hidden
+          onChange={(event) => {
+            void attach(event.target.files?.[0]);
+            event.target.value = '';   // so the same file can be picked twice running
+          }}
+        />
+        <IconButton
+          onClick={() => filePicker.current?.click()}
+          aria-label="Attach a photograph"
+          sx={{ minWidth: 48 }}
+        >
+          <AttachFileIcon />
+        </IconButton>
         <TextField
           placeholder="Message"
           value={draft}
