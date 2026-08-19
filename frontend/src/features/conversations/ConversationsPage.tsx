@@ -1,22 +1,30 @@
-import { useState } from 'react';
 import {
-  Alert, Box, CircularProgress, Divider, List, ListItemButton, ListItemText, Stack,
-  TextField, Typography,
+  Alert, Box, CircularProgress, List, ListItemButton, ListItemText, Stack, Typography,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import { IconButton } from '@mui/material';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useNavigate } from 'react-router-dom';
-import { useConversations, useDirectory } from './api';
+import { useConversations } from './api';
 import { useAuth } from '../auth/AuthContext';
+import { unreadCounts } from '../../offline/db';
 import { tokens } from '../../app/theme';
-import { directConversationId } from '../../shared/conversationId';
+
+/** A stable default, so the list renders on the first paint rather than after the first query. */
+const NOTHING_UNREAD: Record<string, number> = {};
 
 export default function ConversationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
   const conversations = useConversations();
-  const directory = useDirectory(search);
+
+  // From the device's own store, live: a message arriving on the stream while this list is on
+  // screen moves the badge without a refetch, and the count is right with no signal at all.
+  const unread = useLiveQuery(
+    () => (user ? unreadCounts(user.id) : Promise.resolve(NOTHING_UNREAD)),
+    [user?.id],
+    NOTHING_UNREAD,
+  );
 
   const nothingAssigned =
     conversations.isSuccess && conversations.data.length === 0;
@@ -55,57 +63,69 @@ export default function ConversationsPage() {
 
       {/*
         A person with no posting — an accountant, an admin, a new hire before they are put on a
-        site — has no channels at all. A blank list is how somebody concludes the app is broken
-        and goes back to WhatsApp on day one, so it says why and points at the directory.
+        site — has no site channels. Announcements and Nirman's channel are still here, so the
+        list is never blank, but it says why the sites are missing.
       */}
       {nothingAssigned && (
         <Alert severity="info" sx={{ mt: 2 }}>
           <strong>You are not posted to a site yet.</strong> Your site&rsquo;s conversation will
-          appear here when you are. Meanwhile you can message anyone in your organisation — search
-          below.
+          appear here when you are.
         </Alert>
       )}
 
       <List>
-        {conversations.data?.map((conversation) => (
-          <ListItemButton
-            key={conversation.id}
-            onClick={() => navigate(`/c/${encodeURIComponent(conversation.id)}`)}
-            sx={{ borderBottom: `1px solid ${tokens.line}` }}
-          >
-            <ListItemText primary={conversation.name} secondary={conversation.subtitle} />
-          </ListItemButton>
-        ))}
+        {conversations.data?.map((conversation) => {
+          const count = unread[conversation.id] ?? 0;
+          return (
+            <ListItemButton
+              key={conversation.id}
+              onClick={() => navigate(`/c/${encodeURIComponent(conversation.id)}`)}
+              sx={{ borderBottom: `1px solid ${tokens.line}`, gap: 1 }}
+            >
+              <ListItemText
+                primary={conversation.name}
+                secondary={conversation.subtitle}
+                // The name carries the weight as well as the badge. A count alone is a small
+                // orange dot on a cracked screen in sunlight; the bolder line is what is
+                // actually read at arm's length.
+                primaryTypographyProps={{ fontWeight: count > 0 ? 700 : 400 }}
+              />
+              {count > 0 && <UnreadBadge count={count} name={conversation.name} />}
+            </ListItemButton>
+          );
+        })}
       </List>
+    </Box>
+  );
+}
 
-      <Divider sx={{ my: 2 }} />
-
-      <Stack spacing={1}>
-        <Typography variant="overline" color="text.secondary">
-          Find someone
-        </Typography>
-        <TextField
-          placeholder="Name or username"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-        />
-        <List>
-          {directory.data
-            ?.filter((person) => person.userId !== user?.id)
-            .map((person) => (
-              <ListItemButton
-                key={person.userId}
-                onClick={() => {
-                  navigate(
-                    `/c/${encodeURIComponent(directConversationId(user!.id, person.userId))}`,
-                  );
-                }}
-              >
-                <ListItemText primary={person.fullName} secondary={person.username} />
-              </ListItemButton>
-            ))}
-        </List>
-      </Stack>
+/**
+ * The count of messages nobody on this device has read yet.
+ *
+ * <p>Written out for the screen reader rather than left as a bare numeral, and capped at 99+ so
+ * a channel left alone for a month does not widen the row it sits in.</p>
+ */
+function UnreadBadge({ count, name }: { count: number; name: string }) {
+  return (
+    <Box
+      aria-label={`${count} unread in ${name}`}
+      sx={{
+        flexShrink: 0,
+        minWidth: 26,
+        height: 26,
+        px: 0.75,
+        borderRadius: '13px',
+        display: 'grid',
+        placeItems: 'center',
+        bgcolor: tokens.signal,
+        color: tokens.surface,
+        fontFamily: '"IBM Plex Mono", monospace',
+        fontSize: '0.8rem',
+        fontWeight: 700,
+        lineHeight: 1,
+      }}
+    >
+      {count > 99 ? '99+' : count}
     </Box>
   );
 }
