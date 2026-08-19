@@ -101,10 +101,21 @@ CREATE ROLE sandesh LOGIN PASSWORD '<pick one>';
 ```
 
 ```sql
+GRANT sandesh TO CURRENT_USER;
+```
+
+```sql
 CREATE DATABASE sandesh OWNER sandesh;
 ```
 
 The role first, then the database it owns. Owning it is all the grant Flyway needs.
+
+The middle line is not optional and the error without it is opaque —
+`must be able to SET ROLE "sandesh"`. Since PostgreSQL 16, creating a database owned by
+*another* role requires membership in that role, and a managed Postgres does not hand you the
+superuser that would skip the check. Membership can be revoked afterwards; the ownership stays.
+It grants nothing new in any case, because the role that created `sandesh` can `ALTER ROLE` it
+regardless.
 
 A dedicated role rather than reusing `neondb_owner`, and the reason is this repository: it is
 public, and Sandesh is a second service holding a second set of secrets. If those leak, they
