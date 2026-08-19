@@ -117,6 +117,28 @@ superuser that would skip the check. Membership can be revoked afterwards; the o
 It grants nothing new in any case, because the role that created `sandesh` can `ALTER ROLE` it
 regardless.
 
+If the database already exists (created before the role did), reassign rather than re-create —
+the `GRANT` above is what makes this permitted:
+
+```sql
+ALTER DATABASE sandesh OWNER TO sandesh;
+```
+
+Then connect **to the `sandesh` database** and confirm both owners, because owning a database is
+not the same as owning its `public` schema, and Flyway needs `CREATE` there or the backend dies
+at boot with `permission denied for schema public`:
+
+```sql
+SELECT current_database(), (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()) AS db_owner, (SELECT pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname = 'public') AS schema_owner;
+```
+
+`db_owner` must be `sandesh`. `schema_owner` may be `sandesh` or `pg_database_owner` — the
+latter tracks whoever owns the database and is fine. If it is anything else:
+
+```sql
+ALTER SCHEMA public OWNER TO sandesh;
+```
+
 A dedicated role rather than reusing `neondb_owner`, and the reason is this repository: it is
 public, and Sandesh is a second service holding a second set of secrets. If those leak, they
 should reach a messenger's spool and not the payroll sitting on the same server.
