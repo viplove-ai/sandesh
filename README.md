@@ -94,8 +94,17 @@ fly apps create sandesh
 Then set the backend's secrets (never in `fly.toml` — this repo is public):
 
 ```bash
-fly secrets set --app sandesh-api JWT_SECRET=... DB_HOST=... DB_PASSWORD=... NIRMAN_DB_HOST=... NIRMAN_DB_PASSWORD=... STORAGE_ACCESS_KEY=... STORAGE_SECRET_KEY=...
+flyctl storage create --app sandesh-api --name sandesh-media
 ```
+
+```bash
+flyctl secrets set --app sandesh-api DATABASE_URL='jdbc:postgresql://<neon-host>/sandesh?sslmode=require' DB_USER='neondb_owner' DB_PASSWORD='...' NIRMAN_DATABASE_URL='jdbc:postgresql://<neon-host>/nirman?sslmode=require' NIRMAN_DB_USER='chat_reader' NIRMAN_DB_PASSWORD='...' JWT_SECRET='<the same value Nirman uses>' STORAGE_ACCESS_KEY='tid_...' STORAGE_SECRET_KEY='tsec_...' STORAGE_BUCKET='sandesh-media' CORS_ALLOWED_ORIGINS='https://sandesh.fly.dev'
+```
+
+Production takes the two connection strings **whole**, because Neon's require `sslmode` — the
+`DB_HOST`/`DB_PORT` form in `.env.example` is for local development only. Take Neon's **direct**
+endpoint, not the `-pooler` one: Hikari already holds a pool, and stacking it on PgBouncer in
+transaction mode breaks prepared statements.
 
 Create a deploy token per app and add each to this repo's Actions secrets as
 `FLY_API_TOKEN_BACKEND` and `FLY_API_TOKEN_FRONTEND`:

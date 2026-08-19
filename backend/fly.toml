@@ -11,6 +11,8 @@ primary_region = "sin"   # Same region as nirman-constructions-api: this service
 
 [env]
   SPRING_PROFILES_ACTIVE = "prod"
+  # Tigris, the same S3 endpoint Nirman uses. The bucket differs, the credentials differ.
+  STORAGE_ENDPOINT = "https://fly.storage.tigris.dev"
   JAVA_OPTS = "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
 
 [http_service]

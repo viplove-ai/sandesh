@@ -1,7 +1,51 @@
+# Production profile. Everything sensitive comes from the environment; on Fly those are set
+# with `flyctl secrets set` and never in fly.toml, which is committed and public.
+
 app:
+  datasource:
+    # A managed Postgres (Neon) hands you one connection string including sslmode, so take it
+    # whole rather than rebuilding it from host and port the way the default profile does.
+    sandesh:
+      jdbc-url: ${DATABASE_URL}
+      username: ${DB_USER}
+      password: ${DB_PASSWORD}
+      # Neon's free tier caps connections well below the default, and a 512mb relay does not
+      # need more. The stream holds a connection to the client, not to the database.
+      maximum-pool-size: 6
+      minimum-idle: 1
+    # The same Postgres server, a different database, and a role that may only SELECT from two
+    # views. Separate credentials on purpose: if this one leaked it reads a directory, not a
+    # payroll.
+    nirman:
+      jdbc-url: ${NIRMAN_DATABASE_URL}
+      username: ${NIRMAN_DB_USER}
+      password: ${NIRMAN_DB_PASSWORD}
+      maximum-pool-size: 4
+      minimum-idle: 1
+      read-only: true
   api-docs:
-    public: false      # the route map is not a vulnerability, but nobody in prod needs it
+    # A complete map of the API. Development wants it; a deployment carrying one contractor's
+    # conversations does not publish it.
+    public: false
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
 logging:
   level:
+    root: INFO
     in.sandesh: INFO
-    org.springframework.web: WARN
