@@ -1,0 +1,35 @@
+# Fly.io config for the Sandesh API.
+# Secrets (JWT_SECRET, DB_*, NIRMAN_DB_*, STORAGE_*) are set with `fly secrets set`, never
+# here — this file is committed and the repo is public.
+
+app = "sandesh-api"
+primary_region = "sin"   # Same region as nirman-constructions-api: this service reads Nirman's
+                         # contract views on every connect, and that hop should be short.
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SPRING_PROFILES_ACTIVE = "prod"
+  JAVA_OPTS = "-XX:MaxRAMPercentage=70 -XX:+UseSerialGC -Xss512k"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_start_machines = true
+  # Never suspend. This process holds open event streams, and suspending drops every one of
+  # them — which the clients survive, but a reconnect storm every idle period is not free.
+  auto_stop_machines = "off"
+  min_machines_running = 1
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "45s"   # Flyway runs before the port opens
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/actuator/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"         # No POI, no PDF box — this service is a relay

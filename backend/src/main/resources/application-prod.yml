@@ -1,0 +1,7 @@
+app:
+  api-docs:
+    public: false      # the route map is not a vulnerability, but nobody in prod needs it
+logging:
+  level:
+    in.sandesh: INFO
+    org.springframework.web: WARN

@@ -1,0 +1,19 @@
+# Build output
+backend/target/
+frontend/dist/
+frontend/dev-dist/
+node_modules/
+
+# Local environment — never committed. This repo is public.
+.env
+.env.local
+*.local
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Logs
+*.log

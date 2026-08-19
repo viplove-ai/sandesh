@@ -1,0 +1,39 @@
+# Fly.io config for the nginx-served PWA.
+# nginx reverse-proxies /api/ to the backend over Fly's private network, so the browser talks to
+# one origin and CORS stays out of the way.
+
+app = "sandesh"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+  build-target = "prod"
+
+  [build.args]
+    VITE_API_BASE_URL = "/api/v1"
+    # Auth is Nirman's, and it is a different origin — so this one is absolute, and Nirman's
+    # CORS allow-list has to name https://sandesh.fly.dev.
+    VITE_NIRMAN_API_BASE_URL = "https://nirman-constructions-api.fly.dev/api/v1"
+
+[env]
+  API_UPSTREAM = "sandesh-api.internal:8080"
+  DNS_RESOLVER = "[fdaa::3]"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_start_machines = true
+  auto_stop_machines = "suspend"   # static assets resume in ~1s
+  min_machines_running = 0
+  processes = ["app"]
+
+  [[http_service.checks]]
+    grace_period = "5s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

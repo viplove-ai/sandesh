@@ -1,0 +1,118 @@
+# Rendered at container start by the nginx image's envsubst entrypoint.
+# Only ${API_UPSTREAM} and ${DNS_RESOLVER} are substituted (see
+# NGINX_ENVSUBST_FILTER in the Dockerfile) — nginx's own $variables survive.
+#
+#   docker compose : API_UPSTREAM=backend:8080          DNS_RESOLVER=127.0.0.11
+#   fly.io         : API_UPSTREAM=nirman-api.internal:8080  DNS_RESOLVER=[fdaa::3]
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    client_max_body_size 20m;
+
+    # add_header does not merge across levels: a location that declares one of its own
+    # inherits none of these. Anything below that needs add_header therefore repeats all
+    # four, and anything that can say what it means with `expires` uses that instead —
+    # `expires` is a different directive and leaves the inheritance intact.
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(self), geolocation=(self), microphone=()" always;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    # Hashed build assets are immutable. One Cache-Control and not an `expires` beside it:
+    # nginx would emit both lines and leave the browser to join them.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(self), geolocation=(self), microphone=()" always;
+    }
+
+    # The service worker must never be cached, or clients get stranded on an old build.
+    location = /sw.js {
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "DENY" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(self), geolocation=(self), microphone=()" always;
+    }
+
+    # The shell carries the hashed asset names, so a cached copy of it is a cached copy of
+    # the whole build. `expires -1` sends Cache-Control: no-cache — revalidate every time,
+    # 304 when nothing moved — rather than leaving it to the browser's heuristic, which
+    # invents a freshness lifetime from the file's age and gets it wrong on a quiet week.
+    location = /index.html {
+        expires -1;
+    }
+
+    # The manifest is how a new icon reaches an installed phone at all: Chrome re-fetches it
+    # and compares, and a stale copy is a comparison against the build before last. Never
+    # cached, for the same reason as sw.js.
+    location = /brand/manifest.webmanifest {
+        expires -1;
+    }
+
+    # Everything else under /brand/ is unversioned and may be replaced in place. Five minutes
+    # is short enough that a replacement is picked up the same session and long enough that a
+    # phone is not refetching the lockup on every navigation.
+    location /brand/ {
+        expires 5m;
+    }
+
+    # The event stream, ahead of /api/ so it takes this block rather than the one below.
+    #
+    # `proxy_buffering off` is the whole reason this location exists. With buffering on, nginx
+    # holds each event until its buffer fills or the response ends — so messages arrive in
+    # batches minutes apart, or not at all, and the feature looks broken rather than slow. This
+    # is the single most common way an SSE deployment fails.
+    location = /api/v1/stream {
+        resolver ${DNS_RESOLVER} valid=10s ipv6=on;
+        set $stream_upstream "${API_UPSTREAM}";
+        proxy_pass http://$stream_upstream$request_uri;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        proxy_buffering off;
+        proxy_cache off;
+        chunked_transfer_encoding off;
+        # Longer than the server's own stream cap (10 min), so the backend decides when a
+        # connection ends rather than nginx cutting it short and looking like a network fault.
+        proxy_read_timeout 15m;
+        proxy_send_timeout 15m;
+    }
+
+    location /api/ {
+        # Resolve the upstream per-request: on Fly the backend machine's
+        # private address changes on every deploy, and a hostname baked into
+        # proxy_pass at startup would go stale.
+        resolver ${DNS_RESOLVER} valid=10s ipv6=on;
+        set $api_upstream "${API_UPSTREAM}";
+        proxy_pass http://$api_upstream$request_uri;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+
+    # SPA fallback.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

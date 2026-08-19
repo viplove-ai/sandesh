@@ -1,0 +1,118 @@
+name: Deploy
+
+# Deploys come off `main`. Sandesh has no release branch: the whole argument for a PWA over a
+# store build is that a fix reaches every phone on the next open, and a second branch to merge
+# through is the first thing that erodes it.
+#
+# Both jobs need secrets that only a human can create — see README "Deploying". Until they
+# exist the workflow is dispatch-only and will fail fast with a clear message rather than
+# half-deploying.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Which app to deploy
+        type: choice
+        options: [both, backend, frontend]
+        default: both
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false     # never cancel mid-deploy: a half-applied migration is worse
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - '.github/workflows/deploy.yml'
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/deploy.yml'
+
+  backend:
+    name: Deploy backend
+    needs: changes
+    if: |
+      needs.changes.outputs.backend == 'true' ||
+      github.event.inputs.target == 'backend' ||
+      github.event.inputs.target == 'both'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the Fly token
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_BACKEND }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN_BACKEND is not set. See README 'Deploying' — the apps"
+            echo "::error::and tokens have to be created by a person; this workflow cannot."
+            exit 1
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # Flyway runs on boot, so the health check's grace period covers the migration.
+      - name: Deploy
+        working-directory: backend
+        run: flyctl deploy --remote-only --wait-timeout 600
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_BACKEND }}
+
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' https://sandesh-api.fly.dev/actuator/health || true)
+            if [ "$code" = "200" ]; then echo "healthy"; exit 0; fi
+            echo "attempt $i: got $code"; sleep 6
+          done
+          echo "backend did not become healthy"; exit 1
+
+  frontend:
+    name: Deploy frontend
+    needs: [changes, backend]
+    if: |
+      always() && needs.backend.result != 'failure' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       github.event.inputs.target == 'frontend' ||
+       github.event.inputs.target == 'both')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Require the Fly token
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_FRONTEND }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error::FLY_API_TOKEN_FRONTEND is not set. See README 'Deploying'."
+            exit 1
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        working-directory: frontend
+        run: flyctl deploy --remote-only --wait-timeout 600
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_FRONTEND }}
+
+      - name: Smoke test
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' https://sandesh.fly.dev/)
+          test "$code" = "200" || { echo "frontend returned $code"; exit 1; }

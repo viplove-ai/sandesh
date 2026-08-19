@@ -1,0 +1,58 @@
+# Local development. Sandesh adds no new kind of infrastructure: it wants a database on the
+# Postgres that is already running for Nirman and a bucket on the same MinIO.
+#
+# `docker compose up -d` here brings up a Postgres with both databases and a MinIO, so the repo
+# stands alone. If you already run Nirman's stack, point .env at that one instead and skip this.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sandesh-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-sandesh}
+      POSTGRES_USER: ${DB_USER:-sandesh}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-sandesh_dev_password}
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-sandesh} -d ${DB_NAME:-sandesh}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: sandesh-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-sandesh_minio}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-sandesh_minio_dev_password}
+    ports:
+      - "9010:9000"
+      - "9011:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Creates the bucket once, then exits. Keeps bucket setup out of application startup.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${STORAGE_ACCESS_KEY:-sandesh_minio} ${STORAGE_SECRET_KEY:-sandesh_minio_dev_password} &&
+      mc mb --ignore-existing local/${STORAGE_BUCKET:-sandesh-media} &&
+      mc anonymous set none local/${STORAGE_BUCKET:-sandesh-media} &&
+      echo 'bucket ready'"
+
+volumes:
+  postgres_data:
+  minio_data:
