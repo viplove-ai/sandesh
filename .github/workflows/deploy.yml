@@ -7,9 +7,14 @@ name: Deploy
 # Both jobs need secrets that only a human can create — see README "Deploying". Until they
 # exist the workflow is dispatch-only and will fail fast with a clear message rather than
 # half-deploying.
+# Dispatch only. Deploying on every push to main sounded right and was not: work lands here in
+# small commits, most of which have no business restarting a service that holds open event
+# streams — and a deploy that fails takes fifteen minutes to say so. A deploy is now something
+# somebody decides to do.
+#
+#   gh workflow run deploy.yml --ref main -f target=both
+#
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       target:
