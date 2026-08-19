@@ -46,6 +46,7 @@ public class ModerationController {
 
     private static final String RESTRICT = "chat:restrict";
 
+    private final AdminJoinService adminJoin;
     private final ChatRestrictionRepository restrictions;
     private final ChatReportRepository reports;
     private final ChatAuditRepository audit;
@@ -55,11 +56,13 @@ public class ModerationController {
     private final CurrentUser currentUser;
     private final ObjectMapper json;
 
-    public ModerationController(ChatRestrictionRepository restrictions,
+    public ModerationController(AdminJoinService adminJoin,
+                                ChatRestrictionRepository restrictions,
                                 ChatReportRepository reports, ChatAuditRepository audit,
                                 RestrictionGuard guard, NirmanDirectory directory,
                                 StreamRegistry streams, CurrentUser currentUser,
                                 ObjectMapper json) {
+        this.adminJoin = adminJoin;
         this.restrictions = restrictions;
         this.reports = reports;
         this.audit = audit;
@@ -141,6 +144,26 @@ public class ModerationController {
         AuthenticatedUser reporter = currentUser.required();
         reports.save(new ChatReport(reporter.orgId(), reporter.userId(), request.subjectId(),
                 request.convId(), request.quotedBody(), request.note()));
+    }
+
+    /**
+     * An administrator entering a site conversation they hold no assignment to.
+     *
+     * <p>Announced in the channel, shown in the member list, and audited. There is no quiet
+     * variant of this endpoint and there must not be one.</p>
+     */
+    @PostMapping("/channels/{convId}/join")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Join a site or project conversation as an administrator, visibly")
+    public void joinChannel(@PathVariable String convId) {
+        adminJoin.join(convId, currentUser.required());
+    }
+
+    @PostMapping("/channels/{convId}/leave")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Leave it again, also visibly")
+    public void leaveChannel(@PathVariable String convId) {
+        adminJoin.leave(convId, currentUser.required());
     }
 
     @GetMapping("/audit")
