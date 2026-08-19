@@ -14,6 +14,8 @@ import {
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorDetail } from '../../shared/apiClient';
 import { tokens } from '../../app/theme';
+import SystemCard from './SystemCard';
+import { parseActions } from './actions';
 
 export default function ThreadPage() {
   const { convId = '' } = useParams();
@@ -94,7 +96,13 @@ export default function ThreadPage() {
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h3" noWrap>
-          {convId.startsWith('dm:') ? 'Direct message' : 'Site conversation'}
+          {convId.startsWith('sys:')
+            ? 'Nirman'
+            : convId.startsWith('org:')
+              ? 'Announcements'
+              : convId.startsWith('dm:')
+                ? 'Direct message'
+                : 'Site conversation'}
         </Typography>
       </Stack>
 
@@ -105,7 +113,17 @@ export default function ThreadPage() {
           </Typography>
         )}
         <Stack spacing={1}>
-          {messages?.map((message) => (
+          {messages?.map((message) =>
+            message.kind === 'SYSTEM' ? (
+              // A record waiting on you, not somebody talking. Rendered as a card rather than a
+              // bubble so it does not read as a colleague's message.
+              <SystemCard
+                key={message.msgId}
+                title={(message.body ?? '').split('\n')[0]}
+                body={(message.body ?? '').split('\n').slice(1).join('\n')}
+                actions={parseActions(message.actions)}
+              />
+            ) : (
             <Paper
               key={message.msgId}
               elevation={0}
@@ -173,13 +191,17 @@ export default function ThreadPage() {
                 </Typography>
               )}
             </Paper>
-          ))}
+            ),
+          )}
         </Stack>
         <div ref={bottom} />
       </Box>
 
       {error && <Alert severity="error" sx={{ borderRadius: 0 }}>{error}</Alert>}
 
+      {/* Nirman's channel is written to by Nirman. A composer that looks usable and is not
+          is worse than no composer. */}
+      {!convId.startsWith('sys:') && (
       <Box
         component="form"
         onSubmit={submit}
@@ -213,6 +235,7 @@ export default function ThreadPage() {
           <SendIcon />
         </IconButton>
       </Box>
+      )}
     </Box>
   );
 }

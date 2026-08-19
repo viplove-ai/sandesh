@@ -55,7 +55,11 @@ public class SecurityConfig {
                                 "camera=(), microphone=(), geolocation=(), payment=()")))
                 .authorizeHttpRequests(auth -> {
                     auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                            .requestMatchers("/actuator/health", "/actuator/info").permitAll();
+                            .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                            // Service-to-service: Nirman presents a shared token, not a JWT, and
+                            // SystemController checks it in constant time. Permitted here so the
+                            // JWT filter does not refuse it before that check runs.
+                            .requestMatchers("/api/v1/system/**").permitAll();
                     if (apiDocsPublic) {
                         auth.requestMatchers("/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs/**").permitAll();

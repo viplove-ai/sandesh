@@ -57,6 +57,12 @@ public class ConversationService {
                 ConversationId.project(projectId).toString(), "PROJECT",
                 name, "Everyone on this project", List.of())));
 
+        // Nirman's own channel, above everything: it is the one that carries things waiting on
+        // this person rather than things being said to them.
+        out.add(0, new ConversationView(
+                ConversationId.system(user.userId()).toString(), "SYSTEM",
+                "Nirman", "Approvals and verifications waiting on you", List.of()));
+
         // Everybody gets this one, posting or not. It is the answer to an app that opens empty
         // for an accountant, an administrator or a new hire — and to "send something to the
         // whole team", which was the other thing asked of this product.
@@ -103,6 +109,12 @@ public class ConversationService {
                 }
                 yield directory.membersOfOrg(sender.orgId()).stream()
                         .map(NirmanDirectory.Person::userId).collect(Collectors.toSet());
+            }
+            case SYSTEM -> {
+                // Nobody sends to this channel. Nirman posts through the service endpoint, which
+                // does not come through here, and a person replying to it would be talking to a
+                // record rather than to anybody.
+                throw BusinessException.forbidden("You cannot post to the Nirman channel.");
             }
             case DIRECT -> {
                 if (!conversation.a().equals(sender.userId())

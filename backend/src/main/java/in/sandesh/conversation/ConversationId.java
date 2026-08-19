@@ -12,7 +12,7 @@ import java.util.UUID;
  */
 public record ConversationId(Kind kind, UUID a, UUID b) {
 
-    public enum Kind { SITE, PROJECT, DIRECT, ORG }
+    public enum Kind { SITE, PROJECT, DIRECT, ORG, SYSTEM }
 
     public static ConversationId site(UUID siteId) {
         return new ConversationId(Kind.SITE, siteId, null);
@@ -37,6 +37,15 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
                 : new ConversationId(Kind.DIRECT, other, one);
     }
 
+    /**
+     * Nirman's own channel, one per person. It carries approvals and verifications waiting on
+     * them — a pushed version of the "WAITING ON YOU" register rather than a conversation, which
+     * is why nobody can post to it.
+     */
+    public static ConversationId system(UUID userId) {
+        return new ConversationId(Kind.SYSTEM, userId, null);
+    }
+
     public static ConversationId parse(String raw) {
         try {
             String[] parts = raw.split(":");
@@ -44,6 +53,7 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
                 case "site" -> site(UUID.fromString(parts[1]));
                 case "proj" -> project(UUID.fromString(parts[1]));
                 case "org" -> org(UUID.fromString(parts[1]));
+                case "sys" -> system(UUID.fromString(parts[1]));
                 case "dm" -> direct(UUID.fromString(parts[1]), UUID.fromString(parts[2]));
                 default -> throw new IllegalArgumentException(parts[0]);
             };
@@ -67,6 +77,7 @@ public record ConversationId(Kind kind, UUID a, UUID b) {
             case SITE -> "site:" + a;
             case PROJECT -> "proj:" + a;
             case ORG -> "org:" + a;
+            case SYSTEM -> "sys:" + a;
             case DIRECT -> "dm:" + a + ":" + b;
         };
     }

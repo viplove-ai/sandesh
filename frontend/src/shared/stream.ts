@@ -20,9 +20,10 @@ export interface Delivery {
   convId: string;
   from: string;
   fromName: string;
-  kind: 'TEXT' | 'IMAGE' | 'DOC';
+  kind: 'TEXT' | 'IMAGE' | 'DOC' | 'SYSTEM';
   body?: string;
   media?: { mediaId: string; fileName: string; contentType: string; sizeBytes?: number };
+  actions?: unknown;
   sentAt: string;
 }
 
@@ -135,6 +136,7 @@ export class MessageStream {
       mediaFileName: delivery.media?.fileName,
       mediaContentType: delivery.media?.contentType,
       mediaSizeBytes: delivery.media?.sizeBytes,
+      actions: delivery.actions,
       sentAt: delivery.sentAt,
       state: 'received',
       mine: false,
@@ -158,6 +160,7 @@ export class MessageStream {
         fromName: delivery.fromName,
         kind: delivery.kind,
         body: delivery.body,
+        actions: delivery.actions,
         sentAt: delivery.sentAt,
         state: 'received',
         mine: false,

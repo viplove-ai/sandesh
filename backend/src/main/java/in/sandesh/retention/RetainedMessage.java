@@ -47,6 +47,11 @@ public class RetainedMessage {
     @Column(name = "media", updatable = false)
     private String media;
 
+    /** The buttons on a system card. Null for every ordinary message. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "actions", updatable = false)
+    private String actions;
+
     @Column(name = "sent_at", nullable = false, updatable = false)
     private Instant sentAt;
 
@@ -91,6 +96,14 @@ public class RetainedMessage {
 
     public String getMedia() {
         return media;
+    }
+
+    public String getActions() {
+        return actions;
+    }
+
+    public void setActions(String actions) {
+        this.actions = actions;
     }
 
     public Instant getSentAt() {

@@ -73,6 +73,11 @@ app:
     # enough that a token refresh lands on a fresh authorisation snapshot.
     max-minutes: 10
     heartbeat-seconds: 25
+  system:
+    # What Nirman presents when it posts an actionable card. Blank disables the endpoint outright
+    # rather than accepting an empty token — a misconfigured deployment should refuse the call,
+    # not accept everybody's. At least 32 characters.
+    token: ${SYSTEM_TOKEN:}
   retention:
     # OFF, and that is a decision rather than caution. Keeping the work channels needs a stated
     # purpose, a stated window and language in the employment contract before the first retained

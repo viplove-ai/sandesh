@@ -241,7 +241,21 @@ public class MessageService {
 
     private Delivery toDelivery(OutboxEntry row, String senderName) {
         return new Delivery(row.getMsgId(), row.getConvId(), row.getSenderId(), senderName,
-                row.getKind(), row.getBody(), readMedia(row.getMedia()), row.getSentAt());
+                row.getKind(), row.getBody(), readMedia(row.getMedia()),
+                readActions(row.getActions()), row.getSentAt());
+    }
+
+    /** Passed through as parsed JSON rather than re-modelled: the client owns their shape. */
+    private Object readActions(String actions) {
+        if (actions == null) {
+            return null;
+        }
+        try {
+            return json.readTree(actions);
+        } catch (JsonProcessingException e) {
+            log.warn("Unreadable card actions; delivering the card without its buttons");
+            return null;
+        }
     }
 
     private String writeMedia(MediaRef media) {

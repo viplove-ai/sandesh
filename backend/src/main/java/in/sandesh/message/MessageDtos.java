@@ -25,9 +25,14 @@ public final class MessageDtos {
     public record SendResponse(UUID clientMsgId, UUID msgId, Instant sentAt) {
     }
 
-    /** One delivered message, as it goes out over the stream. */
+    /**
+     * One delivered message, as it goes out over the stream.
+     *
+     * @param actions the buttons on a system card, as raw JSON — paths on Nirman's API that the
+     *                device executes with the user's own token. Null for every ordinary message
+     */
     public record Delivery(UUID msgId, String convId, UUID from, String fromName, String kind,
-                           String body, MediaRef media, Instant sentAt) {
+                           String body, MediaRef media, Object actions, Instant sentAt) {
     }
 
     private MessageDtos() {

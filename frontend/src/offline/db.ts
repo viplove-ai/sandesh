@@ -18,7 +18,9 @@ export interface StoredMessage {
   convId: string;
   from: string;
   fromName: string;
-  kind: 'TEXT' | 'IMAGE' | 'DOC';
+  kind: 'TEXT' | 'IMAGE' | 'DOC' | 'SYSTEM';
+  /** The buttons on a card from Nirman, as delivered. Absent on every ordinary message. */
+  actions?: unknown;
   body?: string;
   mediaId?: string;
   mediaFileName?: string;

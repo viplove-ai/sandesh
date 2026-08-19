@@ -44,10 +44,15 @@ public class RetentionService {
      * <p>Direct messages are Tier 3 and no configuration makes them Tier 2. This returns false
      * for them regardless of the flag, which is the first of the three places that rule is
      * enforced — the service refuses it, and a check constraint refuses it again if the service
-     * is ever wrong.</p>
+     * is ever wrong. System cards are excluded for the opposite reason: they are Tier 1 and
+     * Nirman already holds them.</p>
      */
     public boolean isRetainable(ConversationId conversation) {
-        return properties.enabled() && conversation.kind() != ConversationId.Kind.DIRECT;
+        return properties.enabled()
+                && conversation.kind() != ConversationId.Kind.DIRECT
+                // Tier 1. A system card is already a record in Nirman; a copy here would be a
+                // second version of the truth, and the one nothing keeps up to date.
+                && conversation.kind() != ConversationId.Kind.SYSTEM;
     }
 
     /** Called on the send path, after fan-out. Silent and cheap when retention is off. */

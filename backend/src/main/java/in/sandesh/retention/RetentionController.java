@@ -59,6 +59,10 @@ public class RetentionController {
             case PROJECT -> directory.membershipsOf(user.userId()).stream()
                     .anyMatch(m -> m.projectId().equals(conversation.a()));
             case ORG -> conversation.a().equals(user.orgId());
+            // Yours, but it replays empty: a system card is Tier 1 — already a record in Nirman,
+            // where it can be seen on the screen that owns it. Keeping a second copy here would
+            // be a second version of the truth and the one nothing updates.
+            case SYSTEM -> conversation.a().equals(user.userId());
             case DIRECT -> false;
         };
         if (!member) {
