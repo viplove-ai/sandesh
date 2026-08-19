@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  commitIncoming, db, forgetEverything, markConversationRead, markSent, readCursor, unreadCounts,
-  writeCursor,
+  commitIncoming, db, forgetEverything, markConversationRead, markSent, readConversations,
+  readCursor, saveConversations, unreadCounts, writeCursor,
 } from './db';
 
 /** Whoever is holding the phone. Their own messages are never unread. */
@@ -98,6 +98,37 @@ describe('the device store', () => {
     await markConversationRead(base.convId, '2026-08-19T08:00:00.000Z');
 
     expect((await db.reads.get(base.convId))?.lastReadAt).toBe('2026-08-19T09:00:02.000Z');
+  });
+
+  it('keeps the conversation list on the device, in the order the server gave it', async () => {
+    // Without this the list is network-only: a sign-out clears it, and a phone signing back in
+    // with no signal opens on an empty screen with every message still stored behind it.
+    await saveConversations([
+      { id: 'org:o1', kind: 'ORG', name: 'Announcements', subtitle: 'Everyone at your company' },
+      { id: 'sys:u1', kind: 'SYSTEM', name: 'Nirman' },
+      { id: 'site:s1', kind: 'SITE', name: 'Sector 62 tower B' },
+    ]);
+
+    expect((await readConversations()).map((c) => c.name))
+      .toEqual(['Announcements', 'Nirman', 'Sector 62 tower B']);
+  });
+
+  it('drops a channel the server no longer lists, and keeps its messages', async () => {
+    // A posting that has ended is not still on offer. The messages are the record, though, and
+    // were never the server's to take back.
+    await saveConversations([
+      { id: 'org:o1', kind: 'ORG', name: 'Announcements' },
+      { id: 'site:s1', kind: 'SITE', name: 'Sector 62 tower B' },
+    ]);
+    await commitIncoming({
+      ...base, convId: 'site:s1', msgId: 'm-1', clientMsgId: 'm-1', body: 'Beam cracked',
+      state: 'received',
+    });
+
+    await saveConversations([{ id: 'org:o1', kind: 'ORG', name: 'Announcements' }]);
+
+    expect((await readConversations()).map((c) => c.convId)).toEqual(['org:o1']);
+    expect(await db.messages.where('convId').equals('site:s1').count()).toBe(1);
   });
 
   it('keeps a stream cursor so a reconnect resumes rather than replays', async () => {

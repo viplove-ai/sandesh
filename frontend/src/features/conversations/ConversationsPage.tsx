@@ -16,7 +16,7 @@ const NOTHING_UNREAD: Record<string, number> = {};
 export default function ConversationsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const conversations = useConversations();
+  const { conversations, isLoading, isError, isEmpty } = useConversations();
 
   // From the device's own store, live: a message arriving on the stream while this list is on
   // screen moves the badge without a refetch, and the count is right with no signal at all.
@@ -25,9 +25,6 @@ export default function ConversationsPage() {
     [user?.id],
     NOTHING_UNREAD,
   );
-
-  const nothingAssigned =
-    conversations.isSuccess && conversations.data.length === 0;
 
   return (
     <Box sx={{ p: 2, maxWidth: 720, mx: 'auto' }}>
@@ -54,8 +51,8 @@ export default function ConversationsPage() {
         </IconButton>
       </Stack>
 
-      {conversations.isLoading && <CircularProgress size={24} sx={{ mt: 2 }} />}
-      {conversations.isError && (
+      {isLoading && <CircularProgress size={24} sx={{ mt: 2 }} />}
+      {isError && (
         <Alert severity="error" sx={{ mt: 2 }}>
           Could not load your conversations.
         </Alert>
@@ -66,7 +63,7 @@ export default function ConversationsPage() {
         site — has no site channels. Announcements and Nirman's channel are still here, so the
         list is never blank, but it says why the sites are missing.
       */}
-      {nothingAssigned && (
+      {isEmpty && (
         <Alert severity="info" sx={{ mt: 2 }}>
           <strong>You are not posted to a site yet.</strong> Your site&rsquo;s conversation will
           appear here when you are.
@@ -74,12 +71,12 @@ export default function ConversationsPage() {
       )}
 
       <List>
-        {conversations.data?.map((conversation) => {
-          const count = unread[conversation.id] ?? 0;
+        {conversations.map((conversation) => {
+          const count = unread[conversation.convId] ?? 0;
           return (
             <ListItemButton
-              key={conversation.id}
-              onClick={() => navigate(`/c/${encodeURIComponent(conversation.id)}`)}
+              key={conversation.convId}
+              onClick={() => navigate(`/c/${encodeURIComponent(conversation.convId)}`)}
               sx={{ borderBottom: `1px solid ${tokens.line}`, gap: 1 }}
             >
               <ListItemText

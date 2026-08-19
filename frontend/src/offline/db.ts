@@ -44,8 +44,53 @@ export interface StoredConversation {
   kind: string;
   name: string;
   subtitle?: string;
+  /**
+   * Where the server put it — announcements first, then Nirman, then the sites and projects.
+   * Held as a field rather than re-derived, because the order is the server's opinion about
+   * what matters and sorting by name here would quietly overrule it.
+   */
+  order?: number;
   lastMessageAt?: string;
   lastPreview?: string;
+}
+
+/**
+ * Keep the list of conversations on the device, not only in memory.
+ *
+ * <p>Membership is the server's to decide and is re-derived from Nirman on every call, so this
+ * is a cache rather than a record — but it is the cache every thread is reached through. Held
+ * only in the query client, it went with the sign-out, and a phone signing back in on a bad
+ * connection opened on an empty list with three years of messages sitting in the store behind
+ * it, unreachable. That is what this fixes.</p>
+ *
+ * <p>A channel the server no longer lists is dropped, because a posting that has ended is not
+ * still on offer. Its messages stay: they are the record, and they were never the server's to
+ * take back.</p>
+ */
+export async function saveConversations(
+  list: { id: string; kind: string; name: string; subtitle?: string }[],
+): Promise<void> {
+  const rows: StoredConversation[] = list.map((conversation, index) => ({
+    convId: conversation.id,
+    kind: conversation.kind,
+    name: conversation.name,
+    subtitle: conversation.subtitle,
+    order: index,
+  }));
+  const listed = new Set(rows.map((row) => row.convId));
+
+  await db.transaction('rw', db.conversations, async () => {
+    const stale = (await db.conversations.toCollection().primaryKeys())
+      .filter((convId) => !listed.has(convId));
+    await db.conversations.bulkDelete(stale);
+    await db.conversations.bulkPut(rows);
+  });
+}
+
+/** The stored list, in the order the server gave it. */
+export async function readConversations(): Promise<StoredConversation[]> {
+  const rows = await db.conversations.toArray();
+  return rows.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
 /**
