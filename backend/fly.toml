@@ -26,7 +26,11 @@ primary_region = "sin"   # Same region as nirman-constructions-api: this service
   processes = ["app"]
 
   [[http_service.checks]]
-    grace_period = "45s"   # Flyway runs before the port opens
+    # 120s, not 45. Flyway runs before the port opens, and on a shared CPU the JVM needs most of
+    # a minute before it even reaches that — the first deploy spent 97 seconds in context
+    # initialisation alone. A grace period shorter than the real cold start turns every slow
+    # boot into a ten-minute health-check timeout that says nothing about the cause.
+    grace_period = "120s"
     interval = "15s"
     timeout = "5s"
     method = "GET"
@@ -34,4 +38,7 @@ primary_region = "sin"   # Same region as nirman-constructions-api: this service
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "512mb"         # No POI, no PDF box — this service is a relay
+  # 1gb, matching Nirman. 512mb looked reasonable for a relay and was not: the first deploy
+  # spent 97 seconds initialising the Spring context, which is a JVM thrashing rather than a
+  # JVM working. Hibernate and the two connection pools cost what they cost.
+  memory = "1gb"

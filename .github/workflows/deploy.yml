@@ -73,6 +73,15 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_BACKEND }}
 
+      # A failed deploy reports "health checks did not pass", which is a symptom and never the
+      # cause. The cause is always in the application log, so fetch it here rather than making
+      # somebody go and look — the ten minutes spent waiting for the timeout is enough.
+      - name: Why it failed
+        if: failure()
+        run: flyctl logs --app sandesh-api --no-tail | tail -60
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_BACKEND }}
+
       - name: Smoke test
         run: |
           for i in $(seq 1 20); do
@@ -81,6 +90,12 @@ jobs:
             echo "attempt $i: got $code"; sleep 6
           done
           echo "backend did not become healthy"; exit 1
+
+      - name: Why the smoke test failed
+        if: failure()
+        run: flyctl logs --app sandesh-api --no-tail | tail -60
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_BACKEND }}
 
   frontend:
     name: Deploy frontend
