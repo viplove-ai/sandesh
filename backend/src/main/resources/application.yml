@@ -73,6 +73,15 @@ app:
     # enough that a token refresh lands on a fresh authorisation snapshot.
     max-minutes: 10
     heartbeat-seconds: 25
+  retention:
+    # OFF, and that is a decision rather than caution. Keeping the work channels needs a stated
+    # purpose, a stated window and language in the employment contract before the first retained
+    # message exists — none of which is engineering's to supply, and shipping this enabled would
+    # make the legal position a consequence of a deploy. See docs/PLAN.md §15.
+    enabled: ${RETENTION_ENABLED:false}
+    # Three years is a placeholder. The real number follows the contract's arbitration window,
+    # which is why it is configuration and not a constant.
+    window-days: ${RETENTION_WINDOW_DAYS:1095}
   outbox:
     # Anything nobody collects in a week is destroyed. The TTL is the retention policy.
     sweep-after-days: 7

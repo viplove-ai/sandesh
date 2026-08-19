@@ -9,6 +9,7 @@ import in.sandesh.directory.NirmanDirectory;
 import in.sandesh.media.MediaService;
 import in.sandesh.moderation.RestrictionGuard;
 import in.sandesh.notify.Notifier;
+import in.sandesh.retention.RetentionService;
 import in.sandesh.message.MessageDtos.Delivery;
 import in.sandesh.message.MessageDtos.MediaRef;
 import in.sandesh.message.MessageDtos.SendRequest;
@@ -53,6 +54,7 @@ public class MessageService {
     private final StreamRegistry streams;
     private final RestrictionGuard restrictions;
     private final MediaService media;
+    private final RetentionService retention;
     private final Notifier notifier;
     private final ObjectMapper json;
     private final int sweepAfterDays;
@@ -60,7 +62,8 @@ public class MessageService {
     public MessageService(OutboxRepository outbox, MessageIdempotencyRepository ledger,
                           ConversationService conversations, NirmanDirectory directory,
                           StreamRegistry streams, RestrictionGuard restrictions,
-                          MediaService media, Notifier notifier, ObjectMapper json,
+                          MediaService media, RetentionService retention, Notifier notifier,
+                          ObjectMapper json,
                           @Value("${app.outbox.sweep-after-days:7}") int sweepAfterDays) {
         this.outbox = outbox;
         this.ledger = ledger;
@@ -69,6 +72,7 @@ public class MessageService {
         this.streams = streams;
         this.restrictions = restrictions;
         this.media = media;
+        this.retention = retention;
         this.notifier = notifier;
         this.json = json;
         this.sweepAfterDays = sweepAfterDays;
@@ -126,6 +130,12 @@ public class MessageService {
                         request.body(), media, sentAt))
                 .toList();
         outbox.saveAll(rows);
+
+        // After fan-out, and silent when retention is off. A direct message never reaches here
+        // whatever the setting: isRetainable refuses it, and a check constraint refuses it again
+        // if this is ever wrong.
+        retention.record(msgId, sender.orgId(), conversation, sender.userId(), request.kind(),
+                request.body(), media, sentAt);
 
         deliverNow(rows, sender);
         return new SendResponse(request.clientMsgId(), msgId, sentAt);

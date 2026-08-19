@@ -178,10 +178,27 @@ fly tokens create deploy --app sandesh-api
 Finally, add `https://sandesh.fly.dev` to Nirman's `CORS_ALLOWED_ORIGINS` — without it every
 sign-in fails at the preflight.
 
+## Retention is built and switched off
+
+`app.retention.enabled` defaults to **false**, and that default is a decision rather than
+caution. Keeping the work channels needs a stated purpose, a stated window and language in the
+employment contract *before* the first retained message exists — none of which is engineering's
+to supply, and shipping it enabled would make the legal position a consequence of a deploy.
+
+When counsel has signed off:
+
+```bash
+flyctl secrets set --app sandesh-api RETENTION_ENABLED=true RETENTION_WINDOW_DAYS=1095
+```
+
+Three years is a placeholder; the real number follows your contracts' arbitration window.
+Direct messages are never retained by any setting — refused in the service and again by a check
+constraint, because it is the one thing that must not be got wrong.
+
 ## What is deliberately not here yet
 
-Documents, retention (§15 — gated on counsel, not on engineering), the action channel (§16), the
-device eviction ladder (§22), read receipts and typing. Each is cut on purpose and the reasoning
+The action channel (§16), read receipts and typing, and the export gate's approval flow — the
+tables exist, the two-approver workflow does not. Each is cut on purpose and the reasoning
 is in `docs/PLAN.md` §24 — the pilot exists to answer two questions, and everything above only
 helps answer them at scale.
 
