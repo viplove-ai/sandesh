@@ -3,6 +3,9 @@ backend/target/
 frontend/dist/
 frontend/dev-dist/
 node_modules/
+# tsc's incremental cache. It is a build artifact keyed to one machine's paths and timestamps,
+# so tracking it means every build shows up as a change and two people's builds conflict.
+*.tsbuildinfo
 
 # Local environment — never committed. This repo is public.
 .env
